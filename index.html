@@ -226,7 +226,7 @@
 <div id="loginScreen" style="display:flex; align-items:center; justify-content:center; min-height:100vh; background:var(--bg);">
   <form id="loginForm" style="background:#fff; border:1px solid var(--line); border-radius:14px; padding:36px 32px; width:100%; max-width:340px; box-shadow:0 10px 30px rgba(0,0,0,.06);">
     <div style="text-align:center; margin-bottom:22px;">
-      <div style="font-weight:800; font-size:20px; letter-spacing:-.02em;">Guep<span style="color:#16234A;">EX</span> Facturation</div>
+      <div style="font-weight:800; font-size:20px; letter-spacing:-.02em;">Guep<span style="color:var(--red);">EX</span> Facturation</div>
       <div style="font-size:12px; color:var(--slate); margin-top:4px;">Connexion requise</div>
     </div>
     <div class="field" style="margin-bottom:12px;">
@@ -404,6 +404,7 @@
           <p class="section-sub">Suivi des factures et de leur statut de paiement.</p>
         </div>
         <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="globalSearch" placeholder="🔍 Numéro, client ou tracking..." style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; width:230px;">
           <select id="typeFilter" style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer;">
             <option value="">Tous les types</option>
             <option value="classique">Classique</option>
@@ -1422,7 +1423,38 @@ document.getElementById('typeFilter').onchange = ()=>{ currentPage = 0; loadPage
 document.getElementById('pagerPrev').onclick = ()=>{ if(currentPage>0){ currentPage--; loadPage(); } };
 document.getElementById('pagerNext').onclick = ()=>{ if((currentPage+1)*PAGE_SIZE < totalCount){ currentPage++; loadPage(); } };
 
+let searchDebounce = null;
+document.getElementById('globalSearch').addEventListener('input', ()=>{
+  clearTimeout(searchDebounce);
+  searchDebounce = setTimeout(()=>{ currentPage = 0; loadPage(); }, 350);
+});
+
+async function searchFacturesGlobal(query){
+  try{
+    const { data, error } = await sb.rpc('search_factures', { p_query: query });
+    if(error){ console.error(error); return []; }
+    return (data||[]).map(r=>({
+      key:r.key, numero:r.numero, date:r.date, raison:r.raison, type:r.type||'classique',
+      totals:r.totals||{}, payer:(r.totals&&r.totals.payer)||0,
+      statut:r.statut||'non_paye', basePaiement:r.base_paiement||'', montantPartiel:r.montant_partiel||0,
+      remarque:r.remarque||'', createdByName:r.created_by_name||''
+    }));
+  }catch(e){ console.error(e); return []; }
+}
+
 async function loadPage(){
+  const query = document.getElementById('globalSearch').value.trim();
+  const filterSelects = ['typeFilter','dashClientFilter','monthFilter'];
+  if(query){
+    filterSelects.forEach(id=>document.getElementById(id).disabled = true);
+    const rows = await searchFacturesGlobal(query);
+    lastIndex = rows;
+    totalCount = rows.length;
+    renderTable(rows);
+    document.getElementById('histPager').style.display = 'none';
+    return;
+  }
+  filterSelects.forEach(id=>document.getElementById(id).disabled = false);
   const { rows, count } = await fetchFacturePage(currentPage, PAGE_SIZE, currentFilters());
   lastIndex = rows;
   totalCount = count;
@@ -1450,7 +1482,16 @@ function renderTable(index){
   const table = document.getElementById('histTable');
   const empty = document.getElementById('histEmpty');
   const canEdit = true; // rôle unique désormais — accès complet
-  if(!index.length){ body.innerHTML=''; table.style.display='none'; empty.style.display=''; return; }
+  if(!index.length){
+    body.innerHTML='';
+    table.style.display='none';
+    const query = document.getElementById('globalSearch').value.trim();
+    empty.querySelector('div:last-child').textContent = query
+      ? `Aucun résultat pour "${query}".`
+      : "Aucune facture enregistrée pour l'instant.";
+    empty.style.display='';
+    return;
+  }
   empty.style.display='none';
   table.style.display='';
   body.innerHTML = index.map(e=>{
