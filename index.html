@@ -97,6 +97,9 @@
   td{padding:8px 10px; border-bottom:1px solid #EFF0F3;}
   tr:last-child td{border-bottom:none;}
   td.num{text-align:right; font-variant-numeric:tabular-nums;}
+  #histTable thead th{background:#16234A; color:#fff; border-bottom:none;}
+  #histTable thead th:first-child{border-top-left-radius:8px;}
+  #histTable thead th:last-child{border-top-right-radius:8px;}
   .rm-btn{
     background:none; border:none; color:#C7CBD3; cursor:pointer; font-size:15px;
     line-height:1; padding:2px 6px; border-radius:5px;
@@ -1550,8 +1553,10 @@ function renderTable(index){
     const selBg = paye ? 'var(--ok-bg)' : (partiel ? 'var(--warn-bg)' : '#fff');
     const selText = paye ? 'var(--ok)' : (partiel ? 'var(--warn)' : 'var(--slate)');
     const statutLabel = paye ? 'Payé' : (partiel ? 'Payé partiellement' : 'Impayé');
-    return `<tr>
-      <td>${e.numero}</td>
+    const dObj = new Date(e.date);
+    const enRetard = !paye && !isNaN(dObj) && (Date.now() - dObj.getTime()) > 15*24*3600*1000;
+    return `<tr${enRetard ? ' style="background:#FFF4F4; border-left:3px solid var(--red);"' : ''}>
+      <td>${e.numero}${enRetard ? ' <span title="En retard (+15 jours)" style="color:var(--red); font-weight:700;">⚠</span>' : ''}</td>
       <td>${typeBadge(e.type)}</td>
       <td>${fmtDateDMY(e.date)}</td>
       <td>${e.raison}</td>
