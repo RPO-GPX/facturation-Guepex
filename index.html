@@ -197,13 +197,20 @@
     .fs-meta{margin-bottom:12px; font-size:10.8px; gap:1px 20px;}
     .fs-meta .r{padding:2px 0;}
     .fs-table th, .fs-table td{padding:3px 6px; font-size:10px;}
-    .fs-table-dense th, .fs-table-dense td{padding:3px 4px; font-size:9.2px;}
+    .fs-table-dense th, .fs-table-dense td{padding:2px 3px; font-size:8.3px;}
     .fs-table tbody tr{page-break-inside:avoid;}
     .fs-totals{margin-top:8px;}
     .fs-totals .r{padding:3px 10px;}
     .fs-letters{margin-top:12px;}
     .fs-sign{margin-top:26px;}
     .fs-foot{margin-top:auto; padding-top:8px; font-size:8.7px; line-height:1.5;}
+    .fs-page-tight .fs-head{padding-bottom:5px; margin-bottom:5px;}
+    .fs-page-tight .fs-title{margin:1px 0 6px;}
+    .fs-page-tight .fs-meta{margin-bottom:6px;}
+    .fs-page-tight .fs-totals{margin-top:5px;}
+    .fs-page-tight .fs-letters{margin-top:6px;}
+    .fs-page-tight .fs-sign{margin-top:10px;}
+    .fs-page-tight .fs-foot{padding-top:5px;}
   }
 
   /* Duplique exactement les tailles d'impression ci-dessus, hors @media, pour pouvoir
@@ -216,7 +223,7 @@
   .print-measure .fs-meta{ margin-bottom:12px; font-size:10.8px; gap:1px 20px; }
   .print-measure .fs-meta .r{ padding:2px 0; }
   .print-measure .fs-table th, .print-measure .fs-table td{ padding:3px 6px; font-size:10px; }
-  .print-measure .fs-table-dense th, .print-measure .fs-table-dense td{ padding:3px 4px; font-size:9.2px; }
+  .print-measure .fs-table-dense th, .print-measure .fs-table-dense td{ padding:2px 3px; font-size:8.3px; }
   .print-measure .fs-totals{ margin-top:8px; }
   .print-measure .fs-totals .r{ padding:3px 10px; }
   .print-measure .fs-letters{ margin-top:12px; }
@@ -468,6 +475,25 @@
     <div style="display:flex; justify-content:flex-end; gap:10px;">
       <button class="btn btn-ghost" id="confirmModalCancelBtn">Annuler</button>
       <button class="btn btn-primary" id="confirmModalConfirmBtn">Confirmer</button>
+    </div>
+  </div>
+</div>
+
+<div id="editFactureModal" style="display:none; position:fixed; inset:0; background:rgba(24,27,32,.45); z-index:100; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:14px; padding:28px 26px; width:100%; max-width:360px; box-shadow:0 20px 50px rgba(0,0,0,.2);">
+    <h2 class="section-title" style="margin-bottom:16px;">Modifier la facture</h2>
+    <div class="field" style="margin-bottom:14px;">
+      <label>Numéro de facture</label>
+      <input type="text" id="editFactureNumero">
+    </div>
+    <div class="field" style="margin-bottom:18px;">
+      <label>Date</label>
+      <input type="date" id="editFactureDate">
+    </div>
+    <div id="editFactureError" style="color:var(--red); font-size:12.5px; font-weight:600; margin-bottom:12px; min-height:16px;"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px;">
+      <button class="btn btn-ghost" id="editFactureCancelBtn">Annuler</button>
+      <button class="btn btn-primary" id="editFactureSaveBtn">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -1356,7 +1382,7 @@ function fsFooterHTML(){
 }
 function fsTableHTML(rows, type){
   const schema = TYPE_SCHEMAS[type];
-  const denseClass = type === 'inter_compagnie' ? ' fs-table-inter' : (schema.columns.length > 7 ? ' fs-table-dense' : '');
+  const denseClass = (type === 'inter_compagnie' || schema.columns.length > 7) ? ' fs-table-dense' : '';
   if(type === 'inter_compagnie'){
     let bodyHtml = '';
     for(let i=0; i<rows.length; i++){
@@ -1493,7 +1519,7 @@ function renderFactureSheet(rec){
   // Inter-compagnie : structure fixe et connue (toujours 30 lignes) — une seule page
   // forcée, jamais de découpage, quel que soit le résultat de la mesure automatique.
   if(type === 'inter_compagnie'){
-    document.getElementById('factureSheet').innerHTML = `<div class="fs-page">
+    document.getElementById('factureSheet').innerHTML = `<div class="fs-page fs-page-tight">
       ${fsHeaderHTML(rec, 1, 1)}
       ${fsTableHTML(rec.rows, type)}
       ${fsTotalsHTML(rec)}
@@ -1716,22 +1742,11 @@ function renderTable(index){
       <td>
         <button class="btn btn-ghost btn-sm" onclick="reopenFacture('${e.key}')">Revoir / Imprimer</button>
         ${canEdit ? `
-        <button class="btn btn-ghost btn-sm" onclick="onEditNumero('${e.key}')" title="Modifier le numéro de facture">✎ N°</button>
-        <button class="btn btn-ghost btn-sm" onclick="onDeleteFacture('${e.key}')" title="Supprimer" style="color:var(--red); border-color:#F3C9C9;">🗑</button>
+        <button class="btn btn-ghost btn-sm" onclick="onEditNumero('${e.key}')" title="Modifier le numéro et la date de facture">✎ N°/Date</button>
         ` : ''}
       </td>
     </tr>`;
   }).join('');
-}
-async function onDeleteFacture(key){
-  const ok = await showConfirmModal('Supprimer définitivement cette facture ? Cette action est irréversible.', 'Supprimer');
-  if(!ok) return;
-  try{
-    const { error } = await sb.from('factures').delete().eq('key', key);
-    if(error){ console.error(error); toast('Erreur lors de la suppression.'); return; }
-    toast('Facture supprimée.');
-    loadPage();
-  }catch(e){ console.error(e); toast('Erreur lors de la suppression.'); }
 }
 async function onRemarqueChange(key, value){
   await setFactureRemarque(key, value);
@@ -1791,20 +1806,52 @@ document.getElementById('exportExcelBtn').onclick = async ()=>{
   const suffix = (f.month ? '-' + f.month : '') + (f.client ? '-' + f.client.replace(/[^a-zA-Z0-9]+/g,'_') : '') + (f.type ? '-' + f.type : '');
   XLSX.writeFile(wb, 'tableau-de-bord-factures' + suffix + '.xlsx');
 };
+function showEditFactureModal(numero, date){
+  return new Promise(resolve=>{
+    const overlay = document.getElementById('editFactureModal');
+    const numeroInput = document.getElementById('editFactureNumero');
+    const dateInput = document.getElementById('editFactureDate');
+    const errEl = document.getElementById('editFactureError');
+    const saveBtn = document.getElementById('editFactureSaveBtn');
+    const cancelBtn = document.getElementById('editFactureCancelBtn');
+    numeroInput.value = numero || '';
+    dateInput.value = date || '';
+    errEl.textContent = '';
+    overlay.style.display = 'flex';
+    function cleanup(result){
+      overlay.style.display = 'none';
+      saveBtn.removeEventListener('click', onSave);
+      cancelBtn.removeEventListener('click', onCancel);
+      resolve(result);
+    }
+    function onSave(){ cleanup({ numero: numeroInput.value.trim(), date: dateInput.value }); }
+    function onCancel(){ cleanup(null); }
+    saveBtn.addEventListener('click', onSave);
+    cancelBtn.addEventListener('click', onCancel);
+  });
+}
 async function onEditNumero(key){
   const entry = lastIndex.find(e=>e.key===key);
   if(!entry) return;
-  const input = prompt('Nouveau numéro de facture :', entry.numero);
-  if(input === null) return; // annulé
-  const newNumero = input.trim();
-  if(!newNumero || newNumero === entry.numero) return;
+  const result = await showEditFactureModal(entry.numero, entry.date);
+  if(!result) return; // annulé
+  const { numero: newNumero, date: newDate } = result;
+  if(!newNumero){ toast('Le numéro de facture est requis.'); return; }
+  const numeroChanged = newNumero !== entry.numero;
+  const dateChanged = newDate !== entry.date;
+  if(!numeroChanged && !dateChanged) return;
   try{
-    const { data: existing, error: checkErr } = await sb.from('factures').select('key').eq('numero', newNumero).neq('key', key).limit(1);
-    if(checkErr){ toast('Erreur de vérification.'); return; }
-    if(existing && existing.length){ toast('Ce numéro est déjà utilisé par une autre facture.'); return; }
-    const { error: updErr } = await sb.from('factures').update({ numero: newNumero }).eq('key', key);
+    if(numeroChanged){
+      const { data: existing, error: checkErr } = await sb.from('factures').select('key').eq('numero', newNumero).neq('key', key).limit(1);
+      if(checkErr){ toast('Erreur de vérification.'); return; }
+      if(existing && existing.length){ toast('Ce numéro est déjà utilisé par une autre facture.'); return; }
+    }
+    const payload = {};
+    if(numeroChanged) payload.numero = newNumero;
+    if(dateChanged) payload.date = newDate;
+    const { error: updErr } = await sb.from('factures').update(payload).eq('key', key);
     if(updErr){ toast('Erreur lors de la mise à jour.'); return; }
-    toast('Numéro de facture mis à jour.');
+    toast('Facture mise à jour.');
     loadPage();
   }catch(e){ console.error(e); toast('Erreur lors de la mise à jour.'); }
 }
