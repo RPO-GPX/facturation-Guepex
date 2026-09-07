@@ -197,7 +197,7 @@
     .fs-meta{margin-bottom:12px; font-size:10.8px; gap:1px 20px;}
     .fs-meta .r{padding:2px 0;}
     .fs-table th, .fs-table td{padding:3px 6px; font-size:10px;}
-    .fs-table-dense th, .fs-table-dense td{padding:2px 3px; font-size:8.3px;}
+    .fs-table-dense th, .fs-table-dense td{padding:3px 4px; font-size:9.2px;}
     .fs-table tbody tr{page-break-inside:avoid;}
     .fs-totals{margin-top:8px;}
     .fs-totals .r{padding:3px 10px;}
@@ -216,7 +216,7 @@
   .print-measure .fs-meta{ margin-bottom:12px; font-size:10.8px; gap:1px 20px; }
   .print-measure .fs-meta .r{ padding:2px 0; }
   .print-measure .fs-table th, .print-measure .fs-table td{ padding:3px 6px; font-size:10px; }
-  .print-measure .fs-table-dense th, .print-measure .fs-table-dense td{ padding:2px 3px; font-size:8.3px; }
+  .print-measure .fs-table-dense th, .print-measure .fs-table-dense td{ padding:3px 4px; font-size:9.2px; }
   .print-measure .fs-totals{ margin-top:8px; }
   .print-measure .fs-totals .r{ padding:3px 10px; }
   .print-measure .fs-letters{ margin-top:12px; }
@@ -272,6 +272,7 @@
         <button class="btn type-btn active" data-type="classique" onclick="selectInvoiceType('classique')">Facture classique</button>
         <button class="btn type-btn" data-type="cls" onclick="selectInvoiceType('cls')">Facture CLS</button>
         <button class="btn type-btn" data-type="location_moto" onclick="selectInvoiceType('location_moto')">Facture location moto</button>
+        <button class="btn type-btn" data-type="inter_compagnie" onclick="selectInvoiceType('inter_compagnie')">Facture Inter-compagnie</button>
       </div>
     </div>
 
@@ -315,9 +316,9 @@
     </div>
 
     <div class="card" id="locoStartBlock" style="display:none;">
-      <h2 class="section-title">Facture location moto</h2>
-      <p class="section-sub">Ce type de facture se remplit manuellement (description, quantité/jours, prix unitaire) — pas d'import Excel.</p>
-      <button class="btn btn-primary" id="locoStartBtn">Créer une facture de location moto →</button>
+      <h2 class="section-title" id="manualStartTitle">Facture location moto</h2>
+      <p class="section-sub" id="manualStartHint">Ce type de facture se remplit manuellement (description, quantité/jours, prix unitaire) — pas d'import Excel.</p>
+      <button class="btn btn-primary" id="locoStartBtn">Créer la facture →</button>
     </div>
   </div>
 
@@ -427,6 +428,7 @@
             <option value="classique">Classique</option>
             <option value="cls">CLS</option>
             <option value="location_moto">Location moto</option>
+            <option value="inter_compagnie">Inter-compagnie</option>
           </select>
           <select id="dashClientFilter" style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer;">
             <option value="">Tous les clients</option>
@@ -632,9 +634,38 @@ const TYPE_SCHEMAS = {
     hasDroitTimbre: false,
     totalLabel: 'Montant TTC',
     numeroFormat: (n,y)=>String(n).padStart(3,'0') + '/LOC_' + y,
-    counterType: 'loc'
+    counterType: 'loc',
+    manual: true
+  },
+  inter_compagnie: {
+    label: 'Facture Inter-compagnie',
+    columns: [
+      {key:'designation', label:'Désignation'},
+      {key:'service', label:'Service'},
+      {key:'nombreEnvois', label:"Nombre d'envois", num:true},
+      {key:'montantHt', label:'Montant HT', num:true}
+    ],
+    hasDroitTimbre: false,
+    totalLabel: 'Total TTC',
+    numeroFormat: (n,y)=>'C/Facture ' + String(n).padStart(6,'0') + '/' + y,
+    counterType: 'standard',
+    manual: true,
+    fixedGrid: true
   }
 };
+
+// Grille fixe des catégories/services pour la facture Inter-compagnie
+const INTER_CATEGORIES = ['Enlèvement','Expédition','Transfert','Réception','Livraison'];
+const INTER_SERVICES = ['Ecommerce HD','Ecommerce SD','Classic HD','Classic SD','Particulier HD','Particulier SD'];
+function buildInterRows(){
+  const rows = [];
+  INTER_CATEGORIES.forEach(cat=>{
+    INTER_SERVICES.forEach(svc=>{
+      rows.push({ designation:cat, service:svc, nombreEnvois:0, montantHt:0 });
+    });
+  });
+  return rows;
+}
 
 function selectInvoiceType(type){
   invoiceType = type;
@@ -644,9 +675,21 @@ function selectInvoiceType(type){
   document.getElementById('previewCard').style.display='none';
   document.getElementById('filterCard').style.display='none';
   fileInput.value='';
-  const isLoco = type==='location_moto';
-  document.getElementById('excelImportBlock').style.display = isLoco ? 'none' : '';
-  document.getElementById('locoStartBlock').style.display = isLoco ? '' : 'none';
+  const isManual = TYPE_SCHEMAS[type].manual;
+  document.getElementById('excelImportBlock').style.display = isManual ? 'none' : '';
+  document.getElementById('locoStartBlock').style.display = isManual ? '' : 'none';
+  if(isManual){
+    const manualTitles = {
+      location_moto: 'Facture location moto',
+      inter_compagnie: 'Facture Inter-compagnie'
+    };
+    const manualHints = {
+      location_moto: "Ce type de facture se remplit manuellement (description, quantité/jours, prix unitaire) — pas d'import Excel.",
+      inter_compagnie: "Ce type de facture se remplit manuellement (désignation, service, nombre d'envois, montant HT) — pas d'import Excel."
+    };
+    document.getElementById('manualStartTitle').textContent = manualTitles[type] || TYPE_SCHEMAS[type].label;
+    document.getElementById('manualStartHint').textContent = manualHints[type] || '';
+  }
   const titles = { classique:'Importer un export Excel', cls:'Importer un export Excel (CLS)' };
   const hints = {
     classique: "Structure attendue : export (colonnes tracking, date d'expédition, client, prénom, nom, wilaya destination, poids, assurance, frais livraison...). Seules les colonnes utiles à la facture seront extraites.",
@@ -1033,15 +1076,28 @@ async function setFactureStatut(key, statut, basePaiement, montantPartiel){
 }
 async function saveFactureRecord(key, record){
   try{
-    const { error } = await sb.from('factures').upsert({
+    // Insertion stricte (jamais d'upsert) : si une facture avec ce numéro/clé
+    // existe déjà (compteur désynchronisé, collision...), l'enregistrement doit
+    // échouer avec une erreur claire plutôt que d'écraser silencieusement les
+    // données existantes.
+    const { error } = await sb.from('factures').insert({
       key, numero:record.numero, date:record.date, raison:record.raison, type:record.type||'classique',
       periode_du:record.periodeDu||null, periode_au:record.periodeAu||null,
       adresse:record.adresse, rc:record.rc, nif:record.nif, nis:record.nis, ai:record.ai,
       fixe:record.fixe, mobile:record.mobile, bc:record.bc,
       rows:record.rows, totals:record.totals, created_by_name:record.createdByName||null
-    }, { onConflict: 'key' });
-    if(error){ console.error(error); toast('Erreur d\'enregistrement Supabase'); }
-  }catch(e){ console.error(e); toast('Erreur d\'enregistrement Supabase'); }
+    });
+    if(error){
+      console.error(error);
+      if(error.code === '23505'){
+        toast('Ce numéro de facture existe déjà (collision) — réessaie, un nouveau numéro sera réservé.');
+      } else {
+        toast('Erreur d\'enregistrement Supabase');
+      }
+      return false;
+    }
+    return true;
+  }catch(e){ console.error(e); toast('Erreur d\'enregistrement Supabase'); return false; }
 }
 async function getFactureRecord(key){
   try{
@@ -1055,6 +1111,7 @@ async function getFactureRecord(key){
 function rowAmount(r){
   if(invoiceType==='cls') return r.tarifVente||0;
   if(invoiceType==='location_moto') return r.total||0;
+  if(invoiceType==='inter_compagnie') return r.montantHt||0;
   return (r.frais||0) + getAssuranceAmount(r);
 }
 
@@ -1071,9 +1128,10 @@ async function openFactureEditor(){
   document.getElementById('f_timbre').value = '0';
 
   const isLoco = invoiceType==='location_moto';
+  const isInter = invoiceType==='inter_compagnie';
   document.getElementById('periodeBlock').style.display = isLoco ? '' : 'none';
-  document.getElementById('addLineBar').style.display = isLoco ? '' : 'none';
-  document.getElementById('rowsCardTitle').textContent = isLoco ? 'Lignes de location' : (invoiceType==='cls' ? 'Courses facturées' : 'Envois facturés');
+  document.getElementById('addLineBar').style.display = (schema.manual && !schema.fixedGrid) ? '' : 'none';
+  document.getElementById('rowsCardTitle').textContent = isLoco ? 'Lignes de location' : (isInter ? 'Détail des prestations' : (invoiceType==='cls' ? 'Courses facturées' : 'Envois facturés'));
   document.getElementById('f_raison_label').textContent = isLoco ? 'Nom de la société' : 'Raison sociale';
   ['f_ai_field','f_fixe_field','f_mobile_field','f_bc_field'].forEach(id=>{
     document.getElementById(id).style.display = isLoco ? 'none' : '';
@@ -1094,6 +1152,9 @@ async function openFactureEditor(){
   if(isLoco && !activeRows.length){
     activeRows = [{ description:'', qtj:30, prixUnitaire:0, total:0 }];
   }
+  if(isInter && !activeRows.length){
+    activeRows = buildInterRows();
+  }
 
   timbreManualOverride = false;
   renderFactureRows();
@@ -1109,7 +1170,7 @@ document.getElementById('backToImportBtn').onclick = ()=>switchView('import');
 function renderFactureRows(){
   const schema = TYPE_SCHEMAS[invoiceType];
   const headRow = document.getElementById('factureHeadRow');
-  headRow.innerHTML = schema.columns.map(c=>`<th${c.num?' class="num"':''}>${c.label}</th>`).join('') + '<th></th>';
+  headRow.innerHTML = schema.columns.map(c=>`<th${c.num?' class="num"':''}>${c.label}</th>`).join('') + (schema.fixedGrid ? '' : '<th></th>');
   const body = document.getElementById('factureRowsBody');
   if(invoiceType==='location_moto'){
     body.innerHTML = activeRows.map((r,i)=>`
@@ -1120,6 +1181,20 @@ function renderFactureRows(){
         <td class="num" id="locoTotal-${i}">${fmtNum(r.total||0)}</td>
         <td><button class="rm-btn" onclick="removeFactureRow(${i})" title="Retirer">✕</button></td>
       </tr>`).join('');
+  } else if(invoiceType==='inter_compagnie'){
+    body.innerHTML = activeRows.map((r,i)=>{
+      const isFirstOfGroup = i % INTER_SERVICES.length === 0;
+      const groupBorder = i>0 && isFirstOfGroup ? ' border-top:2px solid #16234A;' : '';
+      const designationCell = isFirstOfGroup
+        ? `<td rowspan="${INTER_SERVICES.length}" style="font-weight:700; vertical-align:top; background:#FAFAFB;${groupBorder}">${r.designation}</td>`
+        : '';
+      return `<tr style="${groupBorder}">
+        ${designationCell}
+        <td style="${groupBorder}">${r.service}</td>
+        <td class="num" style="${groupBorder}"><input type="number" min="0" step="1" value="${r.nombreEnvois||0}" oninput="updateInterField(${i},'nombreEnvois',this.value)" style="width:80px; text-align:right; border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;"></td>
+        <td class="num" style="${groupBorder}"><input type="number" min="0" step="0.01" value="${r.montantHt||0}" oninput="updateInterField(${i},'montantHt',this.value)" style="width:100px; text-align:right; border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;"></td>
+      </tr>`;
+    }).join('');
   } else {
     body.innerHTML = activeRows.map((r,i)=>`
       <tr>
@@ -1127,7 +1202,7 @@ function renderFactureRows(){
         <td><button class="rm-btn" onclick="removeFactureRow(${i})" title="Retirer">✕</button></td>
       </tr>`).join('');
   }
-  document.getElementById('f_rowCount').textContent = activeRows.length + (invoiceType==='location_moto' ? ' ligne(s) au total' : ' envoi(s) au total');
+  document.getElementById('f_rowCount').textContent = activeRows.length + (schema.manual ? ' ligne(s) au total' : ' envoi(s) au total');
   updateTotals();
 }
 function updateLocoField(i, field, value){
@@ -1140,8 +1215,19 @@ function updateLocoField(i, field, value){
   if(totalCell) totalCell.textContent = fmtNum(r.total);
   updateTotals(); // ne touche pas au tableau des lignes, donc le focus du champ reste actif
 }
+function updateInterField(i, field, value){
+  const r = activeRows[i];
+  if(!r) return;
+  if(field==='designation' || field==='service') r[field] = value;
+  else r[field] = parseFloat(value)||0;
+  updateTotals(); // ne touche pas au tableau des lignes, donc le focus du champ reste actif
+}
 document.getElementById('addLineBtn').onclick = ()=>{
-  activeRows.push({ description:'', qtj:30, prixUnitaire:0, total:0 });
+  if(invoiceType==='inter_compagnie'){
+    activeRows.push({ designation:'', service:'', nombreEnvois:0, montantHt:0 });
+  } else {
+    activeRows.push({ description:'', qtj:30, prixUnitaire:0, total:0 });
+  }
   renderFactureRows();
 };
 function removeFactureRow(i){ activeRows.splice(i,1); renderFactureRows(); }
@@ -1203,7 +1289,7 @@ document.getElementById('generateBtn').onclick = async ()=>{
   await saveClientProfile(raison, profile);
 
   const totals = updateTotals();
-  const rowsSnapshot = invoiceType==='location_moto'
+  const rowsSnapshot = TYPE_SCHEMAS[invoiceType].manual
     ? activeRows.map(r=>({...r}))
     : activeRows.map(r=>({...r, assurance: getAssuranceAmount(r)}));
   const record = {
@@ -1216,7 +1302,8 @@ document.getElementById('generateBtn').onclick = async ()=>{
   };
 
   const key = numero.replace(/[^a-zA-Z0-9]/g,'_');
-  await saveFactureRecord(key, record);
+  const saved = await saveFactureRecord(key, record);
+  if(!saved) return; // échec (ex: collision de numéro) — la facture précédente n'est jamais touchée
 
   currentFacture = record;
   renderFactureSheet(record);
@@ -1246,7 +1333,7 @@ function fsHeaderHTML(rec, pageIndex, pageCount){
       <div class="r"><div class="k">Facture N°</div><div class="v">${rec.numero}</div></div>
       <div class="r"><div class="k">Date</div><div class="v">${fmtDateDMY(rec.date)}</div></div>
       <div class="r"><div class="k">${rec.type==='location_moto' ? 'Nom de la société' : 'Raison sociale'}</div><div class="v">${rec.raison}</div></div>
-      <div class="r"><div class="k">${rec.type==='location_moto' ? 'Nombre de lignes' : (rec.type==='cls' ? 'Nombre total de courses' : "Nombre total d'envois")}</div><div class="v">${rec.rows.length}</div></div>
+      <div class="r"><div class="k">${rec.type==='location_moto' ? 'Nombre de lignes' : (rec.type==='inter_compagnie' ? 'Nombre de lignes' : (rec.type==='cls' ? 'Nombre total de courses' : "Nombre total d'envois"))}</div><div class="v">${rec.rows.length}</div></div>
       <div class="r"><div class="k">Adresse</div><div class="v">${rec.adresse||''}</div></div>
       ${rec.type!=='location_moto' ? `<div class="r"><div class="k">N° Mobile</div><div class="v">${rec.mobile||''}</div></div>` : `<div class="r"><div class="k">RC N°</div><div class="v">${rec.rc||''}</div></div>`}
       ${rec.type==='location_moto' ? `<div class="r"><div class="k">NIF N°</div><div class="v">${rec.nif||''}</div></div><div class="r"><div class="k">NIS N°</div><div class="v">${rec.nis||''}</div></div>` : `
@@ -1269,7 +1356,30 @@ function fsFooterHTML(){
 }
 function fsTableHTML(rows, type){
   const schema = TYPE_SCHEMAS[type];
-  const denseClass = schema.columns.length > 7 ? ' fs-table-dense' : '';
+  const denseClass = type === 'inter_compagnie' ? ' fs-table-inter' : (schema.columns.length > 7 ? ' fs-table-dense' : '');
+  if(type === 'inter_compagnie'){
+    let bodyHtml = '';
+    for(let i=0; i<rows.length; i++){
+      const r = rows[i];
+      const isFirstOfGroup = i===0 || rows[i-1].designation !== r.designation;
+      let span = 1;
+      if(isFirstOfGroup){ while(i+span<rows.length && rows[i+span].designation===r.designation) span++; }
+      const groupBorder = (isFirstOfGroup && i>0) ? ' border-top:2px solid #16234A;' : '';
+      bodyHtml += `<tr style="${groupBorder}">
+        ${isFirstOfGroup ? `<td rowspan="${span}" style="font-weight:700; vertical-align:top; border-top:2px solid #16234A;">${r.designation}</td>` : ''}
+        <td style="${groupBorder}">${r.service}</td>
+        <td class="num" style="${groupBorder}">${Math.round(r.nombreEnvois||0)}</td>
+        <td class="num" style="${groupBorder}">${fmtNum(r.montantHt||0)}</td>
+      </tr>`;
+    }
+    return `
+      <table class="fs-table${denseClass}">
+        <thead><tr>
+          ${schema.columns.map(c=>`<th${c.num?' class="num"':''}>${c.label}</th>`).join('')}
+        </tr></thead>
+        <tbody>${bodyHtml}</tbody>
+      </table>`;
+  }
   return `
     <table class="fs-table${denseClass}">
       <thead><tr>
@@ -1380,6 +1490,17 @@ function paginateRowsMeasured(rec, type){
 
 function renderFactureSheet(rec){
   const type = rec.type || 'classique';
+  // Inter-compagnie : structure fixe et connue (toujours 30 lignes) — une seule page
+  // forcée, jamais de découpage, quel que soit le résultat de la mesure automatique.
+  if(type === 'inter_compagnie'){
+    document.getElementById('factureSheet').innerHTML = `<div class="fs-page">
+      ${fsHeaderHTML(rec, 1, 1)}
+      ${fsTableHTML(rec.rows, type)}
+      ${fsTotalsHTML(rec)}
+      ${fsFooterHTML()}
+    </div>`;
+    return;
+  }
   const pages = paginateRowsMeasured(rec, type);
   const html = pages.map((pageRows, i)=>{
     const isLast = i === pages.length-1;
@@ -1519,8 +1640,8 @@ function renderPager(){
   document.getElementById('pagerPrev').disabled = currentPage===0;
   document.getElementById('pagerNext').disabled = (currentPage+1)>=totalPages;
 }
-const TYPE_LABELS = { classique:'Classique', cls:'CLS', location_moto:'Location moto' };
-const TYPE_BADGE_COLORS = { classique:'var(--slate)', cls:'#0E7490', location_moto:'#9333EA' };
+const TYPE_LABELS = { classique:'Classique', cls:'CLS', location_moto:'Location moto', inter_compagnie:'Inter-compagnie' };
+const TYPE_BADGE_COLORS = { classique:'var(--slate)', cls:'#0E7490', location_moto:'#9333EA', inter_compagnie:'#B45309' };
 function typeBadge(type){
   const t = type || 'classique';
   return `<span class="badge" style="background:#F1F2F4; color:${TYPE_BADGE_COLORS[t]||'var(--slate)'};">${TYPE_LABELS[t]||t}</span>`;
