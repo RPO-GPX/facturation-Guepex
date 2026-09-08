@@ -830,7 +830,10 @@ function handleClsFile(data, headers){
   try{
     const idx = {};
     for(const key in CLS_COLUMN_MAP) idx[key] = findColIndex(headers, CLS_COLUMN_MAP[key]);
-    const missing = ['tracking','date','wilayaDestination','tarifVente'].filter(k => idx[k] === -1);
+    // Prix course est la vraie base du calcul (obligatoire). Tarif de vente, s'il
+    // n'existe pas dans le fichier, est recalculé automatiquement à partir de
+    // Prix course + Immobilisation + Manutention + Point Supplémentaire.
+    const missing = ['tracking','date','wilayaDestination','prixCourse'].filter(k => idx[k] === -1);
     if(missing.length){
       showImportError('Colonnes CLS introuvables : ' + missing.join(', ') + '. Envoie-moi ton fichier réel pour ajuster la correspondance des colonnes.');
       return;
@@ -1039,7 +1042,7 @@ async function fetchFacturePage(page, pageSize, filters){
     const from = page*pageSize, to = from+pageSize-1;
     let query = sb.from('factures')
       .select('key, numero, date, raison, type, totals, statut, base_paiement, montant_partiel, remarque, created_by_name', { count:'exact' })
-      .order('created_at', { ascending:false })
+      .order('numero', { ascending:false })
       .range(from, to);
     if(filters && filters.client) query = query.eq('raison', filters.client);
     if(filters && filters.type) query = query.eq('type', filters.type);
@@ -1061,7 +1064,7 @@ async function fetchFacturePage(page, pageSize, filters){
 }
 async function fetchAllFacturesLight(filters){
   try{
-    let query = sb.from('factures').select('key, numero, date, raison, type, totals, statut, base_paiement, montant_partiel, remarque, created_by_name').order('created_at', { ascending:false });
+    let query = sb.from('factures').select('key, numero, date, raison, type, totals, statut, base_paiement, montant_partiel, remarque, created_by_name').order('numero', { ascending:false });
     if(filters && filters.client) query = query.eq('raison', filters.client);
     if(filters && filters.type) query = query.eq('type', filters.type);
     if(filters && filters.month){
