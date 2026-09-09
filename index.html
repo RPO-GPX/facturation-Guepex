@@ -1431,7 +1431,7 @@ function fsTotalsHTML(rec){
     <div class="fs-totals">
       <div class="r"><span>Total H.T</span><span>${fmtNum(t.ht)}</span></div>
       <div class="r"><span>TVA (19%)</span><span>${fmtNum(t.tva)}</span></div>
-      ${schema.hasDroitTimbre ? `<div class="r"><span>Total TTC</span><span>${fmtNum(t.ttc)}</span></div>
+      ${schema.hasDroitTimbre ? `<div class="r"><span>Montant total a payer TTC par chèque</span><span>${fmtNum(t.ttc)}</span></div>
       <div class="r"><span>Droit de timbre</span><span>${fmtNum(t.timbre)}</span></div>` : ''}
       <div class="r final"><span>${schema.totalLabel}</span><span>${fmtNum(t.payer)}</span></div>
     </div>
