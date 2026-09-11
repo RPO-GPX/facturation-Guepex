@@ -1443,7 +1443,7 @@ function fsTotalsHTML(rec){
       <b>Arrêter la présente facture à la somme de :</b>
       ${numberToFrenchWords(t.payer)}
     </div>
-    ${schema.hasDroitTimbre ? `<div class="fs-pay">Conditions de règlement : En cas de paiement en espèces, veuillez vous référer au montant total à payer. Pour les règlements effectués par chèque ou virement bancaire, veuillez prendre en considération le montant total TTC.</div>` : ''}
+    ${schema.hasDroitTimbre ? `<div class="fs-pay">Conditions de règlement : En cas de paiement en espèces, veuillez vous référer au montant total en espèces. Pour les règlements effectués par chèque ou virement bancaire, veuillez prendre en considération le montant total à payer TTC par chèque.</div>` : ''}
     <div class="fs-sign">
       <div class="fs-signbox">Cachet et signature</div>
     </div>`;
