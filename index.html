@@ -1819,6 +1819,7 @@ document.getElementById('exportExcelBtn').onclick = async ()=>{
       'Type': TYPE_LABELS[e.type||'classique'] || e.type,
       'Date': fmtDateDMY(e.date),
       'Client': e.raison,
+      'Montant Total H.T (DA)': ht,
       'Montant à payer (DA)': refAmount,
       'Statut': e.statut === 'paye' ? 'Payé' : (e.statut === 'partiel' ? 'Payé partiellement' : 'Impayé'),
       'Payé sur la base de': (e.statut === 'paye' || e.statut === 'partiel') ? (base==='ttc' ? 'Total TTC' : 'Total à payer') : '',
@@ -1830,7 +1831,7 @@ document.getElementById('exportExcelBtn').onclick = async ()=>{
     };
   });
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:20},{wch:14},{wch:12},{wch:28},{wch:18},{wch:16},{wch:14},{wch:18},{wch:22},{wch:16},{wch:30},{wch:20}];
+  ws['!cols'] = [{wch:20},{wch:14},{wch:12},{wch:28},{wch:18},{wch:18},{wch:16},{wch:14},{wch:18},{wch:22},{wch:16},{wch:30},{wch:20}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Factures');
   const f = currentFilters();
