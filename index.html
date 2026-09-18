@@ -262,6 +262,7 @@
     <button class="tab-btn active" data-view="import">Import</button>
     <button class="tab-btn" data-view="facture">Facture</button>
     <button class="tab-btn" data-view="historique">Historique</button>
+    <button class="tab-btn" data-view="client">Fiche client</button>
   </div>
   <div style="display:flex; align-items:center; gap:8px;">
     <span id="userBadge" style="font-size:12px; color:#B8BCC4; font-weight:600;"></span>
@@ -464,6 +465,54 @@
         <span id="pagerInfo" style="font-size:12.5px; color:var(--slate); font-weight:600;"></span>
         <button class="btn btn-ghost btn-sm" id="pagerNext">Suivant →</button>
       </div>
+    </div>
+  </div>
+
+  <!-- ================= FICHE CLIENT ================= -->
+  <div class="view" id="view-client">
+    <div class="card">
+      <h2 class="section-title">Fiche client</h2>
+      <p class="section-sub">Sélectionne un client pour voir toutes ses factures.</p>
+      <div class="field" style="max-width:340px;">
+        <label>Client</label>
+        <select id="ficheClientSelect">
+          <option value="">— Choisir un client —</option>
+        </select>
+      </div>
+    </div>
+
+    <div id="ficheClientContent" style="display:none;">
+      <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px, 1fr)); gap:14px; margin-bottom:16px;">
+        <div class="card" style="margin-bottom:0; padding:16px 18px;">
+          <div style="font-size:11.5px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.03em;">Nombre de factures</div>
+          <div id="ficheNbFactures" style="font-size:22px; font-weight:800; margin-top:6px;">—</div>
+        </div>
+        <div class="card" style="margin-bottom:0; padding:16px 18px;">
+          <div style="font-size:11.5px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.03em;">CA cumulé</div>
+          <div id="ficheCaCumule" style="font-size:22px; font-weight:800; margin-top:6px;">—</div>
+        </div>
+        <div class="card" style="margin-bottom:0; padding:16px 18px;">
+          <div style="font-size:11.5px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.03em;">Montant impayé</div>
+          <div id="ficheImpaye" style="font-size:22px; font-weight:800; margin-top:6px; color:var(--red);">—</div>
+        </div>
+      </div>
+      <div class="card">
+        <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px; margin-bottom:10px;">
+          <h2 class="section-title" style="margin:0;">Historique des factures</h2>
+          <button class="btn btn-ghost btn-sm" id="ficheExportBtn">⬇ Exporter en Excel</button>
+        </div>
+        <div style="overflow:auto;">
+          <table id="ficheClientTable">
+            <thead><tr>
+              <th>Facture N°</th><th>Type</th><th>Date</th><th class="num">Montant à payer</th><th>Statut</th><th></th>
+            </tr></thead>
+            <tbody id="ficheClientBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+    <div id="ficheClientEmpty" class="card empty" style="display:none;">
+      <div class="icon">🧾</div><div>Choisis un client ci-dessus pour afficher sa fiche.</div>
     </div>
   </div>
 
@@ -1724,7 +1773,7 @@ function renderTable(index){
       <td>${e.numero}${enRetard ? ' <span title="En retard (+15 jours)" style="color:var(--red); font-weight:700;">⚠</span>' : ''}</td>
       <td>${typeBadge(e.type)}</td>
       <td>${fmtDateDMY(e.date)}</td>
-      <td>${e.raison}</td>
+      <td><a href="#" onclick="openFicheClientFor('${e.raison.replace(/'/g,"\\'")}'); return false;" style="color:var(--ink); font-weight:600; text-decoration:none; border-bottom:1px dotted var(--slate);" title="Voir la fiche client">${e.raison}</a></td>
       <td class="num">
         ${!canEdit ? `${fmtNum(refAmount)} DA` : (paye || partiel) ? `
         <select onchange="onBaseChange('${e.key}', this.value)" style="border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; font-weight:600; color:var(--ink); cursor:pointer;">
@@ -1900,15 +1949,107 @@ function switchView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique'};
+  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique', client:'client'};
   const btn = document.querySelector(`.tab-btn[data-view="${map[name]}"]`);
   if(btn) btn.classList.add('active');
-  document.querySelector('main').classList.toggle('wide', name==='historique');
+  document.querySelector('main').classList.toggle('wide', name==='historique' || name==='client');
   if(name==='historique') renderHistorique();
+  if(name==='client') renderFicheClientTab();
 }
 document.querySelectorAll('.tab-btn').forEach(b=>{
   b.addEventListener('click', ()=>switchView(b.dataset.view));
 });
+
+// ---------------- Fiche client ----------------
+let ficheClientRows = [];
+async function renderFicheClientTab(){
+  const opts = await fetchFilterOptions();
+  const sel = document.getElementById('ficheClientSelect');
+  const current = sel.value;
+  const clients = [...new Set(opts.map(e=>e.raison).filter(Boolean))].sort((a,b)=>a.localeCompare(b, 'fr'));
+  sel.innerHTML = '<option value="">— Choisir un client —</option>' + clients.map(c=>`<option value="${c}">${c}</option>`).join('');
+  if(clients.includes(current)){ sel.value = current; loadFicheClient(current); }
+  else { document.getElementById('ficheClientContent').style.display = 'none'; document.getElementById('ficheClientEmpty').style.display = ''; }
+}
+document.getElementById('ficheClientSelect').onchange = function(){ loadFicheClient(this.value); };
+function openFicheClientFor(clientName){
+  switchView('client');
+  const sel = document.getElementById('ficheClientSelect');
+  const trySet = ()=>{
+    if([...sel.options].some(o=>o.value===clientName)){ sel.value = clientName; loadFicheClient(clientName); }
+    else setTimeout(trySet, 60);
+  };
+  trySet();
+}
+async function loadFicheClient(clientName){
+  if(!clientName){
+    document.getElementById('ficheClientContent').style.display = 'none';
+    document.getElementById('ficheClientEmpty').style.display = '';
+    return;
+  }
+  document.getElementById('ficheClientEmpty').style.display = 'none';
+  document.getElementById('ficheClientContent').style.display = '';
+  const rows = await fetchAllFacturesLight({ client: clientName });
+  ficheClientRows = rows;
+  let caCumule = 0, impaye = 0;
+  rows.forEach(e=>{
+    const ht = e.totals && e.totals.ht || 0, tva = e.totals && e.totals.tva || 0;
+    const ttc = (e.totals && e.totals.ttc) || (ht + tva);
+    const base = e.basePaiement || 'ttc';
+    const refAmount = base === 'ttc' ? ttc : (e.payer || ttc);
+    caCumule += refAmount;
+    if(e.statut === 'partiel') impaye += Math.max(refAmount - (e.montantPartiel||0), 0);
+    else if(e.statut !== 'paye') impaye += refAmount;
+  });
+  document.getElementById('ficheNbFactures').textContent = rows.length;
+  document.getElementById('ficheCaCumule').textContent = fmtNum(caCumule) + ' DA';
+  document.getElementById('ficheImpaye').textContent = fmtNum(impaye) + ' DA';
+  const body = document.getElementById('ficheClientBody');
+  if(!rows.length){ body.innerHTML = ''; return; }
+  body.innerHTML = rows.map(e=>{
+    const ht = e.totals && e.totals.ht || 0, tva = e.totals && e.totals.tva || 0;
+    const ttc = (e.totals && e.totals.ttc) || (ht + tva);
+    const base = e.basePaiement || 'ttc';
+    const refAmount = base === 'ttc' ? ttc : (e.payer || ttc);
+    const paye = e.statut === 'paye', partiel = e.statut === 'partiel';
+    const statutLabel = paye ? 'Payé' : (partiel ? 'Payé partiellement' : 'Impayé');
+    const selColor = paye ? 'var(--ok)' : (partiel ? 'var(--warn)' : 'var(--slate)');
+    const selBg = paye ? 'var(--ok-bg)' : (partiel ? 'var(--warn-bg)' : '#F4F5F7');
+    return `<tr>
+      <td>${e.numero}</td>
+      <td>${typeBadge(e.type)}</td>
+      <td>${fmtDateDMY(e.date)}</td>
+      <td class="num">${fmtNum(refAmount)} DA</td>
+      <td><span class="badge" style="background:${selBg}; color:${selColor};">${statutLabel}</span></td>
+      <td><button class="btn btn-ghost btn-sm" onclick="reopenFacture('${e.key}')">Revoir / Imprimer</button></td>
+    </tr>`;
+  }).join('');
+}
+document.getElementById('ficheExportBtn').onclick = ()=>{
+  if(!ficheClientRows.length){ toast('Aucune facture à exporter.'); return; }
+  const data = ficheClientRows.map(e=>{
+    const ht = e.totals && e.totals.ht || 0, tva = e.totals && e.totals.tva || 0;
+    const ttc = (e.totals && e.totals.ttc) || (ht + tva);
+    const base = e.basePaiement || 'ttc';
+    const refAmount = base === 'ttc' ? ttc : (e.payer || ttc);
+    return {
+      'Facture N°': e.numero,
+      'Type': TYPE_LABELS[e.type||'classique'] || e.type,
+      'Date': fmtDateDMY(e.date),
+      'Montant Total H.T (DA)': ht,
+      'Montant à payer (DA)': refAmount,
+      'Statut': e.statut === 'paye' ? 'Payé' : (e.statut === 'partiel' ? 'Payé partiellement' : 'Impayé'),
+      'Date accusé': e.dateAccuse ? fmtDateDMY(e.dateAccuse) : '',
+      'Remarque': e.remarque || ''
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:20},{wch:14},{wch:12},{wch:18},{wch:18},{wch:16},{wch:14},{wch:30}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Factures client');
+  const clientName = document.getElementById('ficheClientSelect').value;
+  XLSX.writeFile(wb, 'fiche-client-' + clientName.replace(/[^a-zA-Z0-9]+/g,'_') + '.xlsx');
+};
 
 initAuth();
 </script>
