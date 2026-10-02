@@ -6,6 +6,7 @@
 <title>Facturation — GUEPEX</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.4/chart.umd.min.js"></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600;8..60,700&display=swap" rel="stylesheet">
 <style>
@@ -79,6 +80,8 @@
   .btn:disabled{opacity:.45; cursor:not-allowed;}
   .type-btn{background:#fff; border:1px solid var(--line); color:var(--ink); font-weight:600; padding:10px 16px; border-radius:8px; cursor:pointer; font-family:inherit; font-size:13.5px;}
   .type-btn.active{background:var(--red); color:#fff; border-color:var(--red);}
+  .an-label{font-size:11.5px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.03em;}
+  .an-value{font-size:22px; font-weight:800; margin-top:6px;}
   .grid{display:grid; grid-template-columns:1fr 1fr; gap:14px 18px;}
   .grid.g3{grid-template-columns:1fr 1fr 1fr;}
   .field label{display:block; font-size:12px; font-weight:600; color:var(--slate); margin-bottom:5px;}
@@ -96,6 +99,7 @@
   }
   td{padding:8px 10px; border-bottom:1px solid #EFF0F3;}
   tr:last-child td{border-bottom:none;}
+  th.num{text-align:right;}
   td.num{text-align:right; font-variant-numeric:tabular-nums;}
   #histTable thead th{background:#16234A; color:#fff; border-bottom:none;}
   #histTable thead th:first-child{border-top-left-radius:8px;}
@@ -263,6 +267,7 @@
     <button class="tab-btn" data-view="facture">Facture</button>
     <button class="tab-btn" data-view="historique">Historique</button>
     <button class="tab-btn" data-view="client">Fiche client</button>
+    <button class="tab-btn" data-view="analyse">Analyse</button>
   </div>
   <div style="display:flex; align-items:center; gap:8px;">
     <span id="userBadge" style="font-size:12px; color:#B8BCC4; font-weight:600;"></span>
@@ -283,6 +288,7 @@
         <button class="btn type-btn" data-type="cls" onclick="selectInvoiceType('cls')">Facture CLS</button>
         <button class="btn type-btn" data-type="location_moto" onclick="selectInvoiceType('location_moto')">Facture location moto</button>
         <button class="btn type-btn" data-type="inter_compagnie" onclick="selectInvoiceType('inter_compagnie')">Facture Inter-compagnie</button>
+        <button class="btn type-btn" data-type="ecommerce" onclick="selectInvoiceType('ecommerce')">Facture E-Commerce</button>
       </div>
     </div>
 
@@ -439,6 +445,7 @@
             <option value="cls">CLS</option>
             <option value="location_moto">Location moto</option>
             <option value="inter_compagnie">Inter-compagnie</option>
+            <option value="ecommerce">E-Commerce</option>
           </select>
           <select id="dashClientFilter" style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer;">
             <option value="">Tous les clients</option>
@@ -513,6 +520,106 @@
     </div>
     <div id="ficheClientEmpty" class="card empty" style="display:none;">
       <div class="icon">🧾</div><div>Choisis un client ci-dessus pour afficher sa fiche.</div>
+    </div>
+  </div>
+
+  <!-- ================= ANALYSE ================= -->
+  <div class="view" id="view-analyse">
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(190px, 1fr)); gap:14px; margin-bottom:16px;">
+      <div class="card" style="margin-bottom:0; padding:16px 18px;">
+        <div class="an-label">CA total</div>
+        <div id="anCaTotal" class="an-value">—</div>
+      </div>
+      <div class="card" style="margin-bottom:0; padding:16px 18px;">
+        <div class="an-label">CA encaissé</div>
+        <div id="anCaEncaisse" class="an-value" style="color:var(--ok);">—</div>
+      </div>
+      <div class="card" style="margin-bottom:0; padding:16px 18px;">
+        <div class="an-label">CA impayé</div>
+        <div id="anCaImpaye" class="an-value" style="color:var(--red);">—</div>
+      </div>
+      <div class="card" style="margin-bottom:0; padding:16px 18px;">
+        <div class="an-label">Nombre de factures</div>
+        <div id="anNbFactures" class="an-value">—</div>
+        <div id="anNbParType" style="font-size:11.5px; color:var(--slate); margin-top:6px; line-height:1.5;"></div>
+      </div>
+      <div class="card" style="margin-bottom:0; padding:16px 18px;">
+        <div class="an-label">Montant moyen / facture</div>
+        <div id="anMoyenne" class="an-value">—</div>
+      </div>
+      <div class="card" style="margin-bottom:0; padding:16px 18px;">
+        <div class="an-label">Délai moyen d'accusé</div>
+        <div id="anDelaiAccuse" class="an-value">—</div>
+        <div id="anDelaiAccuseSub" style="font-size:11.5px; color:var(--slate); margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(240px, 1fr)); gap:14px; margin-bottom:16px;">
+      <div class="card" style="margin-bottom:0; padding:16px 18px;">
+        <div class="an-label">Ce mois-ci vs mois dernier — CA</div>
+        <div id="anCmpCa" class="an-value" style="font-size:18px;">—</div>
+        <div id="anCmpCaSub" style="font-size:12px; margin-top:6px;"></div>
+      </div>
+      <div class="card" style="margin-bottom:0; padding:16px 18px;">
+        <div class="an-label">Ce mois-ci vs mois dernier — Nb de factures</div>
+        <div id="anCmpNb" class="an-value" style="font-size:18px;">—</div>
+        <div id="anCmpNbSub" style="font-size:12px; margin-top:6px;"></div>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(340px, 1fr)); gap:14px; margin-bottom:16px;">
+      <div class="card" style="margin-bottom:0;">
+        <h2 class="section-title">CA mensuel (12 derniers mois)</h2>
+        <div style="position:relative; height:260px;"><canvas id="chartCaMensuel"></canvas></div>
+      </div>
+      <div class="card" style="margin-bottom:0;">
+        <h2 class="section-title">Taux d'impayés mensuel (%)</h2>
+        <div style="position:relative; height:260px;"><canvas id="chartTauxImpaye"></canvas></div>
+      </div>
+    </div>
+
+    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(300px, 1fr)); gap:14px; margin-bottom:16px;">
+      <div class="card" style="margin-bottom:0;">
+        <h2 class="section-title">CA par type de facture</h2>
+        <div style="position:relative; height:240px;"><canvas id="chartCaParType"></canvas></div>
+      </div>
+      <div class="card" style="margin-bottom:0;">
+        <h2 class="section-title">Répartition par statut</h2>
+        <div style="position:relative; height:240px;"><canvas id="chartStatut"></canvas></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Classement des clients (CA cumulé)</h2>
+      <p class="section-sub">Tous les clients, du plus gros CA au plus petit, avec leur taux d'impayé propre.</p>
+      <div style="overflow:auto; max-height:420px;">
+        <table id="anTopClientsTable">
+          <thead><tr><th>#</th><th>Client</th><th class="num">Factures</th><th class="num">CA cumulé</th><th class="num">Impayé</th><th class="num">Taux d'impayé</th></tr></thead>
+          <tbody id="anTopClientsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Clients à risque</h2>
+      <p class="section-sub">Clients avec le plus de retards de paiement (factures impayées depuis plus de 15 jours).</p>
+      <div style="overflow:auto;">
+        <table id="anRisqueTable">
+          <thead><tr><th>Client</th><th class="num">Factures en retard</th><th class="num">Montant en retard</th><th class="num">Retard max (jours)</th></tr></thead>
+          <tbody id="anRisqueBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Activité par utilisateur</h2>
+      <p class="section-sub">Nombre de factures créées par personne.</p>
+      <div style="overflow:auto;">
+        <table id="anUsersTable">
+          <thead><tr><th>Utilisateur</th><th class="num">Factures créées</th><th class="num">CA généré</th></tr></thead>
+          <tbody id="anUsersBody"></tbody>
+        </table>
+      </div>
     </div>
   </div>
 
@@ -631,7 +738,7 @@ let allRows = [];        // all rows parsed from excel (post column mapping)
 let activeRows = [];     // rows for the selected client
 let clientValues = [];   // distinct client names found
 let currentFacture = null;
-let invoiceType = 'classique'; // 'classique' | 'cls' | 'location_moto'
+let invoiceType = 'classique'; // 'classique' | 'cls' | 'location_moto' | 'inter_compagnie' | 'ecommerce'
 
 const COLUMN_MAP = {
   tracking: ['tracking'],
@@ -730,6 +837,20 @@ const TYPE_SCHEMAS = {
     counterType: 'standard',
     manual: true,
     fixedGrid: true
+  },
+  ecommerce: {
+    label: 'Facture E-Commerce',
+    columns: [
+      {key:'date', label:'Date', isDate:true},
+      {key:'expediteur', label:'Expéditeur'},
+      {key:'designation', label:'Désignation'},
+      {key:'tarif', label:'Tarif', num:true}
+    ],
+    hasDroitTimbre: true,
+    totalLabel: 'Total à payer',
+    numeroFormat: (n,y)=>'C/Facture ' + String(n).padStart(6,'0') + '/' + y,
+    counterType: 'standard',
+    manual: true
   }
 };
 
@@ -760,11 +881,13 @@ function selectInvoiceType(type){
   if(isManual){
     const manualTitles = {
       location_moto: 'Facture location moto',
-      inter_compagnie: 'Facture Inter-compagnie'
+      inter_compagnie: 'Facture Inter-compagnie',
+      ecommerce: 'Facture E-Commerce'
     };
     const manualHints = {
       location_moto: "Ce type de facture se remplit manuellement (description, quantité/jours, prix unitaire) — pas d'import Excel.",
-      inter_compagnie: "Ce type de facture se remplit manuellement (désignation, service, nombre d'envois, montant HT) — pas d'import Excel."
+      inter_compagnie: "Ce type de facture se remplit manuellement (désignation, service, nombre d'envois, montant HT) — pas d'import Excel.",
+      ecommerce: "Ce type de facture se remplit manuellement (date, expéditeur, désignation, tarif) — pas d'import Excel."
     };
     document.getElementById('manualStartTitle').textContent = manualTitles[type] || TYPE_SCHEMAS[type].label;
     document.getElementById('manualStartHint').textContent = manualHints[type] || '';
@@ -1200,6 +1323,7 @@ function rowAmount(r){
   if(invoiceType==='cls') return r.tarifVente||0;
   if(invoiceType==='location_moto') return r.total||0;
   if(invoiceType==='inter_compagnie') return r.montantHt||0;
+  if(invoiceType==='ecommerce') return r.tarif||0;
   return (r.frais||0) + getAssuranceAmount(r);
 }
 
@@ -1217,9 +1341,10 @@ async function openFactureEditor(){
 
   const isLoco = invoiceType==='location_moto';
   const isInter = invoiceType==='inter_compagnie';
+  const isEcom = invoiceType==='ecommerce';
   document.getElementById('periodeBlock').style.display = isLoco ? '' : 'none';
   document.getElementById('addLineBar').style.display = (schema.manual && !schema.fixedGrid) ? '' : 'none';
-  document.getElementById('rowsCardTitle').textContent = isLoco ? 'Lignes de location' : (isInter ? 'Détail des prestations' : (invoiceType==='cls' ? 'Courses facturées' : 'Envois facturés'));
+  document.getElementById('rowsCardTitle').textContent = isLoco ? 'Lignes de location' : (isInter ? 'Détail des prestations' : (isEcom ? 'Lignes de la facture' : invoiceType==='cls' ? 'Courses facturées' : 'Envois facturés'));
   document.getElementById('f_raison_label').textContent = isLoco ? 'Nom de la société' : 'Raison sociale';
   ['f_ai_field','f_fixe_field','f_mobile_field','f_bc_field'].forEach(id=>{
     document.getElementById(id).style.display = isLoco ? 'none' : '';
@@ -1242,6 +1367,9 @@ async function openFactureEditor(){
   }
   if(isInter && !activeRows.length){
     activeRows = buildInterRows();
+  }
+  if(isEcom && !activeRows.length){
+    activeRows = [{ date:todayISO(), expediteur:'', designation:'TRANSPORT MARCHANDISE', tarif:0 }];
   }
 
   timbreManualOverride = false;
@@ -1267,6 +1395,16 @@ function renderFactureRows(){
         <td class="num"><input type="number" min="0" step="1" value="${r.qtj||0}" oninput="updateLocoField(${i},'qtj',this.value)" style="width:70px; text-align:right; border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;"></td>
         <td class="num"><input type="number" min="0" step="0.01" value="${r.prixUnitaire||0}" oninput="updateLocoField(${i},'prixUnitaire',this.value)" style="width:90px; text-align:right; border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;"></td>
         <td class="num" id="locoTotal-${i}">${fmtNum(r.total||0)}</td>
+        <td><button class="rm-btn" onclick="removeFactureRow(${i})" title="Retirer">✕</button></td>
+      </tr>`).join('');
+  } else if(invoiceType==='ecommerce'){
+    const inp = 'border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;';
+    body.innerHTML = activeRows.map((r,i)=>`
+      <tr>
+        <td><input type="date" value="${r.date||''}" oninput="updateEcomField(${i},'date',this.value)" style="${inp}"></td>
+        <td><input type="text" value="${(r.expediteur||'').replace(/"/g,'&quot;')}" oninput="updateEcomField(${i},'expediteur',this.value)" style="width:200px; ${inp}"></td>
+        <td><input type="text" value="${(r.designation||'').replace(/"/g,'&quot;')}" oninput="updateEcomField(${i},'designation',this.value)" style="width:240px; ${inp}"></td>
+        <td class="num"><input type="number" min="0" step="0.01" value="${r.tarif||0}" oninput="updateEcomField(${i},'tarif',this.value)" style="width:110px; text-align:right; ${inp}"></td>
         <td><button class="rm-btn" onclick="removeFactureRow(${i})" title="Retirer">✕</button></td>
       </tr>`).join('');
   } else if(invoiceType==='inter_compagnie'){
@@ -1303,6 +1441,13 @@ function updateLocoField(i, field, value){
   if(totalCell) totalCell.textContent = fmtNum(r.total);
   updateTotals(); // ne touche pas au tableau des lignes, donc le focus du champ reste actif
 }
+function updateEcomField(i, field, value){
+  const r = activeRows[i];
+  if(!r) return;
+  if(field==='tarif') r.tarif = parseFloat(value)||0;
+  else r[field] = value;
+  if(field==='tarif') updateTotals(); // ne touche pas au tableau, le focus reste actif
+}
 function updateInterField(i, field, value){
   const r = activeRows[i];
   if(!r) return;
@@ -1313,6 +1458,9 @@ function updateInterField(i, field, value){
 document.getElementById('addLineBtn').onclick = ()=>{
   if(invoiceType==='inter_compagnie'){
     activeRows.push({ designation:'', service:'', nombreEnvois:0, montantHt:0 });
+  } else if(invoiceType==='ecommerce'){
+    const last = activeRows[activeRows.length-1] || {};
+    activeRows.push({ date:last.date || document.getElementById('f_date').value || todayISO(), expediteur:last.expediteur||'', designation:last.designation||'TRANSPORT MARCHANDISE', tarif:0 });
   } else {
     activeRows.push({ description:'', qtj:30, prixUnitaire:0, total:0 });
   }
@@ -1421,7 +1569,7 @@ function fsHeaderHTML(rec, pageIndex, pageCount){
       <div class="r"><div class="k">Facture N°</div><div class="v">${rec.numero}</div></div>
       <div class="r"><div class="k">Date</div><div class="v">${fmtDateDMY(rec.date)}</div></div>
       <div class="r"><div class="k">${rec.type==='location_moto' ? 'Nom de la société' : 'Raison sociale'}</div><div class="v">${rec.raison}</div></div>
-      <div class="r"><div class="k">${rec.type==='location_moto' ? 'Nombre de lignes' : (rec.type==='inter_compagnie' ? 'Nombre de lignes' : (rec.type==='cls' ? 'Nombre total de courses' : "Nombre total d'envois"))}</div><div class="v">${rec.rows.length}</div></div>
+      <div class="r"><div class="k">${rec.type==='location_moto' ? 'Nombre de lignes' : ((rec.type==='inter_compagnie' || rec.type==='ecommerce') ? 'Nombre de lignes' : (rec.type==='cls' ? 'Nombre total de courses' : "Nombre total d'envois"))}</div><div class="v">${rec.rows.length}</div></div>
       <div class="r"><div class="k">Adresse</div><div class="v">${rec.adresse||''}</div></div>
       ${rec.type!=='location_moto' ? `<div class="r"><div class="k">N° Mobile</div><div class="v">${rec.mobile||''}</div></div>` : `<div class="r"><div class="k">RC N°</div><div class="v">${rec.rc||''}</div></div>`}
       ${rec.type==='location_moto' ? `<div class="r"><div class="k">NIF N°</div><div class="v">${rec.nif||''}</div></div><div class="r"><div class="k">NIS N°</div><div class="v">${rec.nis||''}</div></div>` : `
@@ -1477,6 +1625,7 @@ function fsTableHTML(rows, type){
         ${rows.map(r=>`<tr>
           ${schema.columns.map(c=>{
             let v = c.key==='assuranceCalc' ? (r.assurance!=null ? r.assurance : getAssuranceAmount(r)) : r[c.key];
+            if(c.isDate) v = fmtDateDMY(v);
             return `<td${c.num?' class="num"':''}>${c.num ? fmtNum(v||0) : (v!=null?v:'')}</td>`;
           }).join('')}
         </tr>`).join('')}
@@ -1733,8 +1882,8 @@ function renderPager(){
   document.getElementById('pagerPrev').disabled = currentPage===0;
   document.getElementById('pagerNext').disabled = (currentPage+1)>=totalPages;
 }
-const TYPE_LABELS = { classique:'Classique', cls:'CLS', location_moto:'Location moto', inter_compagnie:'Inter-compagnie' };
-const TYPE_BADGE_COLORS = { classique:'var(--slate)', cls:'#0E7490', location_moto:'#9333EA', inter_compagnie:'#B45309' };
+const TYPE_LABELS = { classique:'Classique', cls:'CLS', location_moto:'Location moto', inter_compagnie:'Inter-compagnie', ecommerce:'E-Commerce' };
+const TYPE_BADGE_COLORS = { classique:'var(--slate)', cls:'#0E7490', location_moto:'#9333EA', inter_compagnie:'#B45309', ecommerce:'#15803D' };
 function typeBadge(type){
   const t = type || 'classique';
   return `<span class="badge" style="background:#F1F2F4; color:${TYPE_BADGE_COLORS[t]||'var(--slate)'};">${TYPE_LABELS[t]||t}</span>`;
@@ -1949,12 +2098,13 @@ function switchView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique', client:'client'};
+  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique', client:'client', analyse:'analyse'};
   const btn = document.querySelector(`.tab-btn[data-view="${map[name]}"]`);
   if(btn) btn.classList.add('active');
-  document.querySelector('main').classList.toggle('wide', name==='historique' || name==='client');
+  document.querySelector('main').classList.toggle('wide', name==='historique' || name==='client' || name==='analyse');
   if(name==='historique') renderHistorique();
   if(name==='client') renderFicheClientTab();
+  if(name==='analyse') renderAnalyse();
 }
 document.querySelectorAll('.tab-btn').forEach(b=>{
   b.addEventListener('click', ()=>switchView(b.dataset.view));
@@ -2050,6 +2200,256 @@ document.getElementById('ficheExportBtn').onclick = ()=>{
   const clientName = document.getElementById('ficheClientSelect').value;
   XLSX.writeFile(wb, 'fiche-client-' + clientName.replace(/[^a-zA-Z0-9]+/g,'_') + '.xlsx');
 };
+
+// ---------------- Analyse ----------------
+let anChartCa=null, anChartTaux=null, anChartType=null, anChartStatut=null;
+let anRenderSeq = 0;
+function anLoadScript(src){
+  return new Promise((resolve, reject)=>{
+    const s = document.createElement('script');
+    s.src = src; s.onload = resolve; s.onerror = ()=>reject(new Error('échec '+src));
+    document.head.appendChild(s);
+  });
+}
+async function ensureChartJs(){
+  if(typeof Chart !== 'undefined') return true;
+  const sources = [
+    'https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js'
+  ];
+  for(const src of sources){
+    try{ await anLoadScript(src); if(typeof Chart !== 'undefined') return true; }catch(e){ console.warn(e.message); }
+  }
+  return false;
+}
+function anSafeChart(canvasId, config){
+  const canvas = document.getElementById(canvasId);
+  const prev = Chart.getChart(canvas);
+  if(prev) prev.destroy();
+  return new Chart(canvas, config);
+}
+function anRefAmount(e){
+  const ht = e.totals && e.totals.ht || 0, tva = e.totals && e.totals.tva || 0;
+  const ttc = (e.totals && e.totals.ttc) || (ht + tva);
+  const base = e.basePaiement || 'ttc';
+  return base === 'ttc' ? ttc : (e.payer || ttc);
+}
+function anUnpaidAmount(e){
+  const amount = anRefAmount(e);
+  if(e.statut === 'partiel') return Math.max(amount - (e.montantPartiel||0), 0);
+  if(e.statut !== 'paye') return amount;
+  return 0;
+}
+function anMonthKey(dateStr){ return (dateStr||'').slice(0,7); }
+function anMonthLabel(key){
+  const [y,m] = key.split('-');
+  return (MONTH_LABELS[m]||m).slice(0,3) + ' ' + y.slice(2);
+}
+async function renderAnalyse(){
+  const mySeq = ++anRenderSeq;
+  const all = await fetchAllFacturesLight(null);
+  if(mySeq !== anRenderSeq) return; // un rendu plus récent a pris le relais
+
+  // --- Cartes principales ---
+  let caTotal=0, caEncaisse=0, caImpaye=0;
+  const nbParType = {};
+  all.forEach(e=>{
+    const amount = anRefAmount(e);
+    caTotal += amount;
+    const unpaid = anUnpaidAmount(e);
+    caImpaye += unpaid;
+    caEncaisse += (amount - unpaid);
+    const t = e.type||'classique';
+    nbParType[t] = (nbParType[t]||0)+1;
+  });
+  document.getElementById('anCaTotal').textContent = fmtNum(caTotal)+' DA';
+  document.getElementById('anCaEncaisse').textContent = fmtNum(caEncaisse)+' DA';
+  document.getElementById('anCaImpaye').textContent = fmtNum(caImpaye)+' DA';
+  document.getElementById('anNbFactures').textContent = all.length;
+  document.getElementById('anNbParType').innerHTML = Object.entries(nbParType)
+    .map(([t,n])=>`${TYPE_LABELS[t]||t} : ${n}`).join(' · ');
+  document.getElementById('anMoyenne').textContent = all.length ? fmtNum(caTotal/all.length)+' DA' : '—';
+
+  // --- Délai moyen d'accusé ---
+  const delais = [];
+  all.forEach(e=>{
+    if(e.dateAccuse && e.date){
+      const d1 = new Date(e.date), d2 = new Date(e.dateAccuse);
+      if(!isNaN(d1) && !isNaN(d2)){
+        const diff = Math.round((d2-d1)/(24*3600*1000));
+        if(diff>=0) delais.push(diff);
+      }
+    }
+  });
+  if(delais.length){
+    const moy = delais.reduce((s,d)=>s+d,0)/delais.length;
+    document.getElementById('anDelaiAccuse').textContent = moy.toFixed(1)+' j';
+    document.getElementById('anDelaiAccuseSub').textContent = delais.length+' facture(s) avec accusé renseigné';
+  } else {
+    document.getElementById('anDelaiAccuse').textContent = '—';
+    document.getElementById('anDelaiAccuseSub').textContent = 'Aucune date accusé renseignée';
+  }
+
+  // --- 12 derniers mois (clés chronologiques) ---
+  const months = [];
+  const now = new Date();
+  for(let i=11;i>=0;i--){
+    const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+    months.push(d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0'));
+  }
+  const caParMois = {}, totalParMois = {}, impayeParMois = {};
+  months.forEach(m=>{ caParMois[m]=0; totalParMois[m]=0; impayeParMois[m]=0; });
+  all.forEach(e=>{
+    const mk = anMonthKey(e.date);
+    if(mk in caParMois){
+      const amount = anRefAmount(e);
+      caParMois[mk] += amount;
+      totalParMois[mk] += amount;
+      impayeParMois[mk] += anUnpaidAmount(e);
+    }
+  });
+  const tauxParMois = months.map(m=> totalParMois[m]>0 ? (impayeParMois[m]/totalParMois[m]*100) : 0);
+
+  // --- Comparaison ce mois vs mois dernier ---
+  const curKey = months[11], prevKey = months[10];
+  const curCa = caParMois[curKey]||0, prevCa = caParMois[prevKey]||0;
+  const curNb = all.filter(e=>anMonthKey(e.date)===curKey).length;
+  const prevNb = all.filter(e=>anMonthKey(e.date)===prevKey).length;
+  function cmpText(cur, prev, suffix){
+    if(prev===0 && cur===0) return { main:'0'+suffix, sub:'Aucune donnée le mois dernier', color:'var(--slate)' };
+    if(prev===0) return { main:(typeof cur==='number'&&suffix==='')?fmtNum(cur)+' DA':cur+suffix, sub:'Mois dernier : 0', color:'var(--ok)' };
+    const delta = ((cur-prev)/prev*100);
+    const sign = delta>=0?'+':'';
+    return {
+      main: (suffix===' DA' ? fmtNum(cur)+suffix : cur+suffix),
+      sub: sign+delta.toFixed(1)+'% vs mois dernier ('+(suffix===' DA' ? fmtNum(prev)+suffix : prev+suffix)+')',
+      color: delta>=0 ? 'var(--ok)' : 'var(--red)'
+    };
+  }
+  const cmpCa = cmpText(curCa, prevCa, ' DA');
+  document.getElementById('anCmpCa').textContent = cmpCa.main;
+  document.getElementById('anCmpCaSub').textContent = cmpCa.sub;
+  document.getElementById('anCmpCaSub').style.color = cmpCa.color;
+  const cmpNb = cmpText(curNb, prevNb, '');
+  document.getElementById('anCmpNb').textContent = cmpNb.main;
+  document.getElementById('anCmpNbSub').textContent = cmpNb.sub;
+  document.getElementById('anCmpNbSub').style.color = cmpNb.color;
+
+  // --- CA par type / répartition statut ---
+  const caParType = {};
+  all.forEach(e=>{ const t=e.type||'classique'; caParType[t]=(caParType[t]||0)+anRefAmount(e); });
+  const statutCount = { paye:0, partiel:0, non_paye:0 };
+  all.forEach(e=>{ statutCount[e.statut==='paye'?'paye':(e.statut==='partiel'?'partiel':'non_paye')]++; });
+
+  // --- Top clients complet ---
+  const clientStats = {};
+  all.forEach(e=>{
+    if(!e.raison) return;
+    if(!clientStats[e.raison]) clientStats[e.raison] = { nb:0, ca:0, impaye:0 };
+    clientStats[e.raison].nb++;
+    clientStats[e.raison].ca += anRefAmount(e);
+    clientStats[e.raison].impaye += anUnpaidAmount(e);
+  });
+  const topClients = Object.entries(clientStats).sort((a,b)=>b[1].ca-a[1].ca);
+  document.getElementById('anTopClientsBody').innerHTML = topClients.map(([name,s],i)=>{
+    const taux = s.ca>0 ? (s.impaye/s.ca*100) : 0;
+    return `<tr>
+      <td>${i+1}</td>
+      <td><a href="#" onclick="openFicheClientFor('${name.replace(/'/g,"\\'")}'); return false;" style="color:var(--ink); font-weight:600; text-decoration:none; border-bottom:1px dotted var(--slate);">${name}</a></td>
+      <td class="num">${s.nb}</td>
+      <td class="num">${fmtNum(s.ca)} DA</td>
+      <td class="num" style="color:${s.impaye>0?'var(--red)':'var(--slate)'};">${fmtNum(s.impaye)} DA</td>
+      <td class="num">${taux.toFixed(1)}%</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="6" style="text-align:center; color:var(--slate);">Aucune donnée</td></tr>';
+
+  // --- Clients à risque (retard +15j) ---
+  const todayMs = Date.now();
+  const riskStats = {};
+  all.forEach(e=>{
+    if(e.statut === 'paye' || !e.raison) return;
+    const d = new Date(e.date);
+    if(isNaN(d)) return;
+    const joursRetard = Math.floor((todayMs - d.getTime())/(24*3600*1000));
+    if(joursRetard > 15){
+      if(!riskStats[e.raison]) riskStats[e.raison] = { nb:0, montant:0, maxJours:0 };
+      riskStats[e.raison].nb++;
+      riskStats[e.raison].montant += anUnpaidAmount(e);
+      riskStats[e.raison].maxJours = Math.max(riskStats[e.raison].maxJours, joursRetard);
+    }
+  });
+  const riskList = Object.entries(riskStats).sort((a,b)=>b[1].montant-a[1].montant);
+  document.getElementById('anRisqueBody').innerHTML = riskList.map(([name,s])=>`
+    <tr>
+      <td><a href="#" onclick="openFicheClientFor('${name.replace(/'/g,"\\'")}'); return false;" style="color:var(--ink); font-weight:600; text-decoration:none; border-bottom:1px dotted var(--slate);">${name}</a></td>
+      <td class="num">${s.nb}</td>
+      <td class="num" style="color:var(--red); font-weight:700;">${fmtNum(s.montant)} DA</td>
+      <td class="num">${s.maxJours} j</td>
+    </tr>`).join('') || '<tr><td colspan="4" style="text-align:center; color:var(--slate);">Aucun client en retard 🎉</td></tr>';
+
+  // --- Activité par utilisateur ---
+  const userStats = {};
+  all.forEach(e=>{
+    const u = e.createdByName || 'Non renseigné';
+    if(!userStats[u]) userStats[u] = { nb:0, ca:0 };
+    userStats[u].nb++;
+    userStats[u].ca += anRefAmount(e);
+  });
+  const userList = Object.entries(userStats).sort((a,b)=>b[1].nb-a[1].nb);
+  document.getElementById('anUsersBody').innerHTML = userList.map(([name,s])=>`
+    <tr><td>${name}</td><td class="num">${s.nb}</td><td class="num">${fmtNum(s.ca)} DA</td></tr>
+  `).join('') || '<tr><td colspan="3" style="text-align:center; color:var(--slate);">Aucune donnée</td></tr>';
+
+  // --- Graphiques ---
+  const chartIds = ['chartCaMensuel','chartTauxImpaye','chartCaParType','chartStatut'];
+  const showChartError = (msg)=>{
+    chartIds.forEach(id=>{
+      const box = document.getElementById(id).parentElement;
+      let m = box.querySelector('.an-chart-msg');
+      if(!m){ m = document.createElement('div'); m.className='an-chart-msg'; m.style.cssText='position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-align:center;padding:12px;font-size:13px;color:var(--red);'; box.appendChild(m); }
+      m.textContent = msg;
+    });
+  };
+  const clearChartError = ()=> document.querySelectorAll('.an-chart-msg').forEach(m=>m.remove());
+
+  const chartOk = await ensureChartJs();
+  if(mySeq !== anRenderSeq) return;
+  if(!chartOk){ showChartError('Impossible de charger la bibliothèque des graphiques (Chart.js). Vérifiez la connexion internet puis rechargez la page.'); return; }
+  clearChartError();
+
+  try{
+    const navy = '#16234A', red = '#C81E2C';
+    const monthLabels = months.map(anMonthLabel);
+
+    anChartCa = anSafeChart('chartCaMensuel', {
+      type:'bar',
+      data:{ labels:monthLabels, datasets:[{ label:'CA (DA)', data:months.map(m=>caParMois[m]), backgroundColor:navy, borderRadius:4 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } }
+    });
+
+    anChartTaux = anSafeChart('chartTauxImpaye', {
+      type:'line',
+      data:{ labels:monthLabels, datasets:[{ label:"Taux d'impayés (%)", data:tauxParMois, borderColor:red, backgroundColor:'rgba(200,30,44,.12)', fill:true, tension:.3 }] },
+      options:{ responsive:true, maintainAspectRatio:false, plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true, max:100 } } }
+    });
+
+    const typeKeys = Object.keys(caParType);
+    anChartType = anSafeChart('chartCaParType', {
+      type:'doughnut',
+      data:{ labels:typeKeys.map(t=>TYPE_LABELS[t]||t), datasets:[{ data:typeKeys.map(t=>caParType[t]), backgroundColor:['#16234A','#0E7490','#9333EA','#B45309','#15803D'] }] },
+      options:{ responsive:true, maintainAspectRatio:false }
+    });
+
+    anChartStatut = anSafeChart('chartStatut', {
+      type:'doughnut',
+      data:{ labels:['Payé','Payé partiellement','Impayé'], datasets:[{ data:[statutCount.paye, statutCount.partiel, statutCount.non_paye], backgroundColor:['#1E7A44','#B8860B','#C81E2C'] }] },
+      options:{ responsive:true, maintainAspectRatio:false }
+    });
+  }catch(err){
+    console.error('Erreur graphiques Analyse', err);
+    showChartError('Erreur lors de l\'affichage des graphiques : ' + (err && err.message ? err.message : err));
+  }
+}
 
 initAuth();
 </script>
