@@ -35,7 +35,7 @@
     position:sticky; top:0; z-index:20;
   }
   .brand{display:flex; align-items:baseline; gap:10px;}
-  .brand img.logo{height:26px; display:block;}
+  .brand img.logo{height:38px; display:block;}
   .brand .wordmark{font-weight:800; font-size:19px; letter-spacing:-0.02em;}
   .brand .wordmark span{color:var(--red);}
   .brand .tagline{font-size:11px; color:#9AA1AC; letter-spacing:0.08em; text-transform:uppercase;}
@@ -235,6 +235,18 @@
   .print-measure .fs-letters{ margin-top:12px; }
   .print-measure .fs-sign{ margin-top:26px; }
   .print-measure .fs-foot{ margin-top:22px; padding-top:8px; font-size:8.7px; line-height:1.5; }
+
+  /* Rendu hors écran pour la génération directe du PDF : mêmes tailles que l'impression,
+     page de 190mm x 281mm (A4 moins marges 10mm / 8mm) avec pied de page collé en bas. */
+  .print-measure.pdf-render .fs-page{ min-height:281mm; display:flex; flex-direction:column; background:#fff; border:none; border-radius:0; box-sizing:border-box; }
+  .print-measure.pdf-render .fs-foot{ margin-top:auto; }
+  .print-measure.pdf-render .fs-page-tight .fs-head{ padding-bottom:5px; margin-bottom:5px; }
+  .print-measure.pdf-render .fs-page-tight .fs-title{ margin:1px 0 6px; }
+  .print-measure.pdf-render .fs-page-tight .fs-meta{ margin-bottom:6px; }
+  .print-measure.pdf-render .fs-page-tight .fs-totals{ margin-top:5px; }
+  .print-measure.pdf-render .fs-page-tight .fs-letters{ margin-top:6px; }
+  .print-measure.pdf-render .fs-page-tight .fs-sign{ margin-top:10px; }
+  .print-measure.pdf-render .fs-page-tight .fs-foot{ padding-top:5px; }
 </style>
 </head>
 <body>
@@ -410,25 +422,20 @@
   <div class="view" id="view-sheet">
     <div class="actions-bar no-print" style="justify-content:space-between; margin-bottom:16px;">
       <button class="btn btn-ghost" id="backFromSheetBtn">← Retour</button>
-      <button class="btn btn-primary" id="printBtn">🖨 Imprimer / Exporter en PDF</button>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-primary" id="pdfBtn">⬇ Télécharger le PDF</button>
+        <button class="btn btn-ghost" id="printBtn">🖨 Imprimer</button>
+      </div>
     </div>
     <div id="factureSheet"></div>
   </div>
 
   <!-- ================= HISTORIQUE ================= -->
   <div class="view" id="view-historique">
-    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(210px, 1fr)); gap:14px; margin-bottom:16px;">
-      <div class="card" style="margin-bottom:0; padding:16px 18px;">
-        <div style="font-size:11.5px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.03em;">Montant impayé</div>
-        <div id="statCaMois" style="font-size:22px; font-weight:800; margin-top:6px; color:var(--red);">—</div>
-      </div>
-      <div class="card" style="margin-bottom:0; padding:16px 18px;">
+    <div style="display:grid; grid-template-columns:minmax(210px, 260px); gap:14px; margin-bottom:16px;">
+      <div class="card" style="margin-bottom:0; padding:12px 16px;">
         <div style="font-size:11.5px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.03em;">Factures en retard (+15j)</div>
         <div id="statRetard" style="font-size:22px; font-weight:800; margin-top:6px; color:var(--red);">—</div>
-      </div>
-      <div class="card" style="margin-bottom:0; padding:16px 18px; grid-column:span 2;">
-        <div style="font-size:11.5px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.03em;">Top clients (CA cumulé)</div>
-        <div id="statTopClients" style="font-size:12.5px; margin-top:8px; display:flex; flex-direction:column; gap:4px;">—</div>
       </div>
     </div>
     <div class="card">
@@ -447,8 +454,11 @@
             <option value="inter_compagnie">Inter-compagnie</option>
             <option value="ecommerce">E-Commerce</option>
           </select>
-          <select id="dashClientFilter" style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer;">
-            <option value="">Tous les clients</option>
+          <select id="statutFilter" style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer;">
+            <option value="">Tous les statuts</option>
+            <option value="non_paye">Impayé</option>
+            <option value="partiel">Payé partiellement</option>
+            <option value="paye">Payé</option>
           </select>
           <select id="monthFilter" style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer;">
             <option value="">Tous les mois</option>
@@ -1213,6 +1223,12 @@ async function reserveFactureNumber(year, counterType){
     return data;
   }catch(e){ console.error(e); return null; }
 }
+function applyStatutFilter(query, statut){
+  if(!statut) return query;
+  // anciennes factures sans statut enregistré = impayées
+  if(statut==='non_paye') return query.or('statut.eq.non_paye,statut.is.null');
+  return query.eq('statut', statut);
+}
 async function fetchFacturePage(page, pageSize, filters){
   try{
     const from = page*pageSize, to = from+pageSize-1;
@@ -1222,6 +1238,7 @@ async function fetchFacturePage(page, pageSize, filters){
       .range(from, to);
     if(filters && filters.client) query = query.eq('raison', filters.client);
     if(filters && filters.type) query = query.eq('type', filters.type);
+    if(filters && filters.statut) query = applyStatutFilter(query, filters.statut);
     if(filters && filters.month){
       const [y,m] = filters.month.split('-');
       const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
@@ -1243,6 +1260,7 @@ async function fetchAllFacturesLight(filters){
     let query = sb.from('factures').select('key, numero, date, raison, type, totals, statut, base_paiement, montant_partiel, remarque, created_by_name, date_accuse').order('numero', { ascending:false });
     if(filters && filters.client) query = query.eq('raison', filters.client);
     if(filters && filters.type) query = query.eq('type', filters.type);
+    if(filters && filters.statut) query = applyStatutFilter(query, filters.statut);
     if(filters && filters.month){
       const [y,m] = filters.month.split('-');
       const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
@@ -1727,21 +1745,20 @@ function paginateRowsMeasured(rec, type){
   return pages.map(idxArr => idxArr.map(i=>rows[i]));
 }
 
-function renderFactureSheet(rec){
+function factureSheetHTML(rec){
   const type = rec.type || 'classique';
   // Inter-compagnie : structure fixe et connue (toujours 30 lignes) — une seule page
   // forcée, jamais de découpage, quel que soit le résultat de la mesure automatique.
   if(type === 'inter_compagnie'){
-    document.getElementById('factureSheet').innerHTML = `<div class="fs-page fs-page-tight">
+    return `<div class="fs-page fs-page-tight">
       ${fsHeaderHTML(rec, 1, 1)}
       ${fsTableHTML(rec.rows, type)}
       ${fsTotalsHTML(rec)}
       ${fsFooterHTML()}
     </div>`;
-    return;
   }
   const pages = paginateRowsMeasured(rec, type);
-  const html = pages.map((pageRows, i)=>{
+  return pages.map((pageRows, i)=>{
     const isLast = i === pages.length-1;
     return `<div class="fs-page">
       ${fsHeaderHTML(rec, i+1, pages.length)}
@@ -1750,8 +1767,72 @@ function renderFactureSheet(rec){
       ${fsFooterHTML()}
     </div>`;
   }).join('');
-  document.getElementById('factureSheet').innerHTML = html;
 }
+function renderFactureSheet(rec){
+  document.getElementById('factureSheet').innerHTML = factureSheetHTML(rec);
+}
+
+// ---------------- Export PDF direct (sans fenêtre d'impression) ----------------
+async function loadScriptFallback(globalName, sources){
+  if(window[globalName]) return true;
+  for(const src of sources){
+    try{ await anLoadScript(src); if(window[globalName]) return true; }catch(e){ console.warn(e.message); }
+  }
+  return false;
+}
+async function downloadFacturePdf(){
+  const rec = currentFacture;
+  if(!rec){ toast('Aucune facture à exporter.'); return; }
+  const btn = document.getElementById('pdfBtn');
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = 'Génération du PDF...';
+  let container = null;
+  try{
+    const okCanvas = await loadScriptFallback('html2canvas', [
+      'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
+      'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
+    ]);
+    const okPdf = await loadScriptFallback('jspdf', [
+      'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
+      'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'
+    ]);
+    if(!okCanvas || !okPdf){ toast('Impossible de charger les bibliothèques PDF. Vérifiez la connexion internet.'); return; }
+
+    if(document.fonts && document.fonts.ready) await document.fonts.ready;
+
+    // Rendu hors écran avec exactement les tailles d'impression
+    container = document.createElement('div');
+    container.className = 'print-measure pdf-render';
+    document.body.appendChild(container);
+    container.innerHTML = factureSheetHTML(rec);
+    const pages = Array.from(container.querySelectorAll('.fs-page'));
+
+    const { jsPDF } = window.jspdf;
+    const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4', compress:true });
+    for(let i=0; i<pages.length; i++){
+      const canvas = await html2canvas(pages[i], {
+        scale: 2.5, backgroundColor:'#ffffff', useCORS:true, logging:false,
+        onclone: (doc)=>{ const c = doc.querySelector('.pdf-render'); if(c){ c.style.left='0'; c.style.top='0'; } }
+      });
+      const imgW = 190;
+      let imgH = canvas.height * imgW / canvas.width;
+      let w = imgW;
+      if(imgH > 281){ w = imgW * 281 / imgH; imgH = 281; }
+      if(i>0) pdf.addPage();
+      pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 10, 8, w, imgH, undefined, 'FAST');
+    }
+    const safe = (t)=>String(t||'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'');
+    pdf.save(`${safe(rec.numero)}_${safe(rec.raison)}.pdf`);
+    toast('PDF téléchargé');
+  }catch(e){
+    console.error(e);
+    toast('Erreur lors de la génération du PDF.');
+  }finally{
+    if(container && container.parentNode) container.parentNode.removeChild(container);
+    btn.disabled = false; btn.textContent = label;
+  }
+}
+document.getElementById('pdfBtn').onclick = downloadFacturePdf;
 
 document.getElementById('backFromSheetBtn').onclick = ()=>switchView('facture');
 document.getElementById('printBtn').onclick = ()=>window.print();
@@ -1766,50 +1847,28 @@ const MONTH_LABELS = {'01':'Janvier','02':'Février','03':'Mars','04':'Avril','0
 function currentFilters(){
   return {
     month: document.getElementById('monthFilter').value,
-    client: document.getElementById('dashClientFilter').value,
-    type: document.getElementById('typeFilter').value
+    type: document.getElementById('typeFilter').value,
+    statut: document.getElementById('statutFilter').value
   };
 }
 async function renderHistorique(){
   currentPage = 0;
   const opts = await fetchFilterOptions();
   populateMonthFilter(opts);
-  populateClientFilter(opts);
   await loadPage();
   renderStats();
 }
 async function renderStats(){
   const all = await fetchAllFacturesLight(null);
-  let montantImpaye = 0;
-  const clientTotals = {};
   let enRetard = 0;
   const todayMs = Date.now();
   all.forEach(e=>{
-    const ht = e.totals && e.totals.ht || 0, tva = e.totals && e.totals.tva || 0;
-    const ttc = (e.totals && e.totals.ttc) || (ht + tva);
-    const base = e.basePaiement || 'ttc';
-    const refAmount = base === 'ttc' ? ttc : (e.payer || ttc);
-    if(e.statut === 'partiel'){
-      montantImpaye += Math.max(refAmount - (e.montantPartiel||0), 0);
-    } else if(e.statut !== 'paye'){
-      montantImpaye += refAmount;
-    }
-    if(e.raison) clientTotals[e.raison] = (clientTotals[e.raison]||0) + refAmount;
     if(e.statut !== 'paye'){
       const d = new Date(e.date);
       if(!isNaN(d) && (todayMs - d.getTime()) > 15*24*3600*1000) enRetard++;
     }
   });
-  document.getElementById('statCaMois').textContent = fmtNum(montantImpaye) + ' DA';
   document.getElementById('statRetard').textContent = enRetard;
-  const topClients = Object.entries(clientTotals).sort((a,b)=>b[1]-a[1]).slice(0,3);
-  const topEl = document.getElementById('statTopClients');
-  if(!topClients.length){ topEl.textContent = 'Aucune donnée'; }
-  else{
-    topEl.innerHTML = topClients.map(([name,total],i)=>
-      `<div style="display:flex; justify-content:space-between;"><span>${i+1}. ${name}</span><span style="font-weight:700;">${fmtNum(total)} DA</span></div>`
-    ).join('');
-  }
 }
 function populateMonthFilter(opts){
   const sel = document.getElementById('monthFilter');
@@ -1821,16 +1880,9 @@ function populateMonthFilter(opts){
   }).join('');
   if(months.includes(current)) sel.value = current;
 }
-function populateClientFilter(opts){
-  const sel = document.getElementById('dashClientFilter');
-  const current = sel.value;
-  const clients = [...new Set(opts.map(e=>e.raison).filter(Boolean))].sort((a,b)=>a.localeCompare(b, 'fr'));
-  sel.innerHTML = '<option value="">Tous les clients</option>' + clients.map(c=>`<option value="${c}">${c}</option>`).join('');
-  if(clients.includes(current)) sel.value = current;
-}
 document.getElementById('monthFilter').onchange = ()=>{ currentPage = 0; loadPage(); };
-document.getElementById('dashClientFilter').onchange = ()=>{ currentPage = 0; loadPage(); };
 document.getElementById('typeFilter').onchange = ()=>{ currentPage = 0; loadPage(); };
+document.getElementById('statutFilter').onchange = ()=>{ currentPage = 0; loadPage(); };
 document.getElementById('pagerPrev').onclick = ()=>{ if(currentPage>0){ currentPage--; loadPage(); } };
 document.getElementById('pagerNext').onclick = ()=>{ if((currentPage+1)*PAGE_SIZE < totalCount){ currentPage++; loadPage(); } };
 
@@ -1855,7 +1907,7 @@ async function searchFacturesGlobal(query){
 
 async function loadPage(){
   const query = document.getElementById('globalSearch').value.trim();
-  const filterSelects = ['typeFilter','dashClientFilter','monthFilter'];
+  const filterSelects = ['typeFilter','statutFilter','monthFilter'];
   if(query){
     filterSelects.forEach(id=>document.getElementById(id).disabled = true);
     const rows = await searchFacturesGlobal(query);
@@ -2033,7 +2085,7 @@ document.getElementById('exportExcelBtn').onclick = async ()=>{
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Factures');
   const f = currentFilters();
-  const suffix = (f.month ? '-' + f.month : '') + (f.client ? '-' + f.client.replace(/[^a-zA-Z0-9]+/g,'_') : '') + (f.type ? '-' + f.type : '');
+  const suffix = (f.month ? '-' + f.month : '') + (f.client ? '-' + f.client.replace(/[^a-zA-Z0-9]+/g,'_') : '') + (f.type ? '-' + f.type : '') + (f.statut ? '-' + f.statut : '');
   XLSX.writeFile(wb, 'tableau-de-bord-factures' + suffix + '.xlsx');
 };
 function showEditFactureModal(numero, date){
