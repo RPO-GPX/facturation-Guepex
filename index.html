@@ -235,6 +235,34 @@
   .print-measure .fs-letters{ margin-top:12px; }
   .print-measure .fs-sign{ margin-top:26px; }
   .print-measure .fs-foot{ margin-top:22px; padding-top:8px; font-size:8.7px; line-height:1.5; }
+  /* ---------- Facture livreur (modèle auto-entrepreneur) ---------- */
+  .lv-sel{border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer;}
+  .lv-page{
+    background:#fff; color:#111; font-family:Arial, Helvetica, 'Inter', sans-serif; font-size:11px;
+    max-width:794px; margin:0 auto 24px; padding:30px 34px 40px; border:1px solid var(--line); border-radius:4px;
+    -webkit-print-color-adjust:exact; print-color-adjust:exact;
+  }
+  .lv-title{background:#16234A; color:#fff; text-align:center; font-size:30px; letter-spacing:.02em; padding:7px 0; margin-bottom:22px;}
+  .lv-info{width:100%; border-collapse:collapse; margin-bottom:20px;}
+  .lv-info td{padding:5px 12px; border:none; font-size:11px; vertical-align:top;}
+  .lv-info td.k{width:27%; color:#222;}
+  .lv-info td.v{width:40%;}
+  .lv-info td.side{width:33%; font-weight:700; padding-top:6px;}
+  .lv-bar{background:#16234A; color:#fff; font-weight:700; font-size:14px; padding:7px 12px; margin-bottom:8px;}
+  .lv-client{padding:0 12px 6px; font-size:11px; line-height:2;}
+  .lv-table{width:100%; border-collapse:collapse; margin-top:26px;}
+  .lv-table th{background:#16234A; color:#fff; font-size:13px; font-weight:700; padding:8px 10px; text-align:center; border:none;}
+  .lv-table td{padding:5px 10px; font-size:11px; height:17px; border:none; text-align:center;}
+  .lv-table td.num{text-align:right; padding-right:22px;}
+  .lv-table tbody tr:nth-child(even) td{background:#EDF0F6;}
+  .lv-total{display:flex; justify-content:space-between; width:40%; margin:26px 0 0 auto; background:#16234A; color:#fff; font-weight:700; font-size:12px; padding:8px 14px;}
+  .lv-words{margin-top:26px; padding-left:12px; font-size:11px;}
+  .lv-words b{display:block; margin-bottom:3px;}
+  /* Impression : placé APRÈS la règle d'écran pour la surcharger (cadre, marges, une facture par page) */
+  @media print{
+    .lv-page{border:none !important; border-radius:0 !important; box-shadow:none !important; max-width:none !important; margin:0 !important; padding:0 !important; page-break-after:always; break-after:page;}
+    .lv-page:last-child{page-break-after:auto; break-after:auto;}
+  }
 </style>
 </head>
 <body>
@@ -266,6 +294,7 @@
     <button class="tab-btn active" data-view="import">Import</button>
     <button class="tab-btn" data-view="facture">Facture</button>
     <button class="tab-btn" data-view="historique">Historique</button>
+    <button class="tab-btn" data-view="livreur">Livreur</button>
     <button class="tab-btn" data-view="client">Fiche client</button>
     <button class="tab-btn" data-view="analyse">Analyse</button>
   </div>
@@ -289,6 +318,8 @@
         <button class="btn type-btn" data-type="location_moto" onclick="selectInvoiceType('location_moto')">Facture location moto</button>
         <button class="btn type-btn" data-type="inter_compagnie" onclick="selectInvoiceType('inter_compagnie')">Facture Inter-compagnie</button>
         <button class="btn type-btn" data-type="ecommerce" onclick="selectInvoiceType('ecommerce')">Facture E-Commerce</button>
+        <button class="btn type-btn" data-type="livreur" onclick="openLivreurForm()">Facture livreur</button>
+        <button class="btn type-btn" data-type="livreur" onclick="openLivreurGroupForm()">Facturation livreurs groupée</button>
       </div>
     </div>
 
@@ -413,6 +444,152 @@
       <button class="btn btn-primary" id="printBtn">🖨 Imprimer / Exporter en PDF</button>
     </div>
     <div id="factureSheet"></div>
+  </div>
+
+  <!-- ================= LIVREUR : HISTORIQUE ================= -->
+  <div class="view" id="view-livreur">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h2 class="section-title">Factures livreurs</h2>
+          <p class="section-sub">Factures des livreurs auto-entrepreneurs (client : SPA GUEPEX) — suivi du paiement. Section indépendante des autres types de factures.</p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="lvSearch" placeholder="🔍 Numéro ou livreur..." style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; width:200px;">
+          <select id="lvWilayaFilter" class="lv-sel"><option value="">Toutes les wilayas</option></select>
+          <select id="lvLivreurFilter" class="lv-sel"><option value="">Tous les livreurs</option></select>
+          <select id="lvStatutFilter" class="lv-sel">
+            <option value="">Tous les statuts</option>
+            <option value="non_paye">Impayé</option>
+            <option value="partiel">Payé partiellement</option>
+            <option value="paye">Payé</option>
+          </select>
+          <select id="lvMonthFilter" class="lv-sel"><option value="">Tous les mois</option></select>
+          <button class="btn btn-ghost btn-sm" id="lvExportBtn">⬇ Exporter en Excel</button>
+          <button class="btn btn-ghost btn-sm" id="lvPrintAllBtn" title="Imprime toutes les factures affichées avec les filtres actuels, une page par facture">🖨 Imprimer les factures filtrées</button>
+          <button class="btn btn-ghost btn-sm" id="lvGroupBtn">+ Facturation groupée</button>
+          <button class="btn btn-primary btn-sm" id="lvNewBtn">+ Nouvelle facture livreur</button>
+        </div>
+      </div>
+      <div id="lvSummary" style="display:flex; gap:22px; flex-wrap:wrap; margin:14px 0 6px; font-size:13px;"></div>
+      <div style="overflow:auto;">
+        <table id="lvHistTable">
+          <thead><tr>
+            <th>Facture N°</th><th>Date</th><th>Wilaya</th><th>Livreur</th><th class="num">Quantité</th><th class="num">Montant</th><th>Statut</th><th>Remarque</th><th>Créé par</th><th></th>
+          </tr></thead>
+          <tbody id="lvHistBody"></tbody>
+        </table>
+      </div>
+      <div id="lvHistEmpty" class="empty" style="display:none;">
+        <div class="icon">📭</div><div>Aucune facture livreur pour l'instant.</div>
+      </div>
+      <div id="lvPager" style="display:none; justify-content:space-between; align-items:center; margin-top:14px;">
+        <button class="btn btn-ghost btn-sm" id="lvPagerPrev">← Précédent</button>
+        <span id="lvPagerInfo" style="font-size:12.5px; color:var(--slate); font-weight:600;"></span>
+        <button class="btn btn-ghost btn-sm" id="lvPagerNext">Suivant →</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= LIVREUR : NOUVELLE FACTURE ================= -->
+  <div class="view" id="view-livreurForm">
+    <div class="card">
+      <h2 class="section-title">Facture livreur</h2>
+      <p class="section-sub">Facture d'un livreur auto-entrepreneur adressée à SPA GUEPEX. Numérotation propre à chaque livreur, sans TVA ni droit de timbre.</p>
+      <div class="grid g3">
+        <div class="field"><label>Facture N°</label><input id="lv_numero" readonly style="background:#F4F5F7; color:var(--slate); cursor:not-allowed;"></div>
+        <div class="field"><label>Date</label><input type="date" id="lv_date"></div>
+      </div>
+      <div style="font-size:11px; color:var(--slate); margin-top:8px;">Le numéro affiché est une estimation — le numéro définitif de ce livreur est réservé automatiquement au moment de l'enregistrement.</div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Livreur (auto-entrepreneur)</h2>
+      <p class="section-sub">Choisissez la wilaya puis saisissez le nom : si le livreur est déjà enregistré, ses informations sont pré-remplies. Modifiable et mémorisé pour la prochaine fois.</p>
+      <div class="grid">
+        <div class="field"><label>Wilaya</label><select id="lv_wilaya"></select></div>
+        <div class="field"><label>Nom du livreur</label><input id="lv_nom" list="lvNomList" autocomplete="off"><datalist id="lvNomList"></datalist></div>
+        <div class="field"><label>Activité</label><input id="lv_activite"></div>
+        <div class="field"><label>Adresse</label><input id="lv_adresse"></div>
+        <div class="field"><label>NIF</label><input id="lv_nif"></div>
+        <div class="field"><label>N° d'immatriculation</label><input id="lv_immat"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Client</h2>
+      <p class="section-sub">Toujours SPA GUEPEX.</p>
+      <div style="font-size:13px; line-height:1.7;">
+        <div><b>Client :</b> SPA GUEPEX</div>
+        <div><b>RC :</b> 19B0243810-16/00 &nbsp; <b>NIF :</b> 001907024381063 &nbsp; <b>NIS :</b> 001907010000766</div>
+        <div><b>Adresse :</b> Zone d'activité Dar El Beida, Lot N° 147, 148, 149 Dar El Beida</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 class="section-title">Lignes de la facture</h2>
+      <div style="max-height:360px; overflow:auto; border:1px solid var(--line); border-radius:8px;">
+        <table>
+          <thead><tr><th>Description</th><th class="num">Quantité</th><th class="num">Prix unitaire</th><th class="num">Montant</th><th></th></tr></thead>
+          <tbody id="lvRowsBody"></tbody>
+        </table>
+      </div>
+      <div class="actions-bar no-print" style="justify-content:flex-start; margin-top:10px;">
+        <button class="btn btn-ghost btn-sm" id="lvAddLineBtn">+ Ajouter une ligne</button>
+      </div>
+      <div class="totals">
+        <div class="row final"><span>Total DZD</span><span id="lv_total">0,00</span></div>
+      </div>
+      <div class="letters" id="lv_letters"></div>
+    </div>
+
+    <div class="actions-bar">
+      <button class="btn btn-ghost" id="lvCancelBtn">← Annuler</button>
+      <button class="btn btn-primary" id="lvGenerateBtn">Enregistrer &amp; générer la facture</button>
+    </div>
+  </div>
+
+  <!-- ================= LIVREUR : FACTURATION GROUPÉE PAR WILAYA ================= -->
+  <div class="view" id="view-livreurGroup">
+    <div class="card">
+      <h2 class="section-title">Facturation groupée par wilaya</h2>
+      <p class="section-sub">Saisissez plusieurs livreurs d'une même wilaya : une facture est créée pour chaque livreur (numérotation propre à chacun), puis toutes sont imprimées ou exportées en PDF en une seule fois, une page par livreur.</p>
+      <div class="grid g3">
+        <div class="field"><label>Wilaya</label><select id="lg_wilaya"></select></div>
+        <div class="field"><label>Date des factures</label><input type="date" id="lg_date"></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="section-title">Livreurs</h2>
+      <p class="section-sub">Si le livreur est déjà enregistré dans cette wilaya, ses informations sont pré-remplies. Les nouveaux livreurs sont mémorisés.</p>
+      <div style="overflow:auto; border:1px solid var(--line); border-radius:8px;">
+        <table>
+          <thead><tr><th>Livreur</th><th>Activité</th><th>Adresse</th><th>NIF</th><th>N° d'immatriculation</th><th class="num">Quantité</th><th class="num">Prix unitaire</th><th class="num">Montant</th><th></th></tr></thead>
+          <tbody id="lgRowsBody"></tbody>
+        </table>
+      </div>
+      <datalist id="lgNomList"></datalist>
+      <div class="actions-bar no-print" style="justify-content:flex-start; margin-top:10px;">
+        <button class="btn btn-ghost btn-sm" id="lgAddBtn">+ Ajouter un livreur</button>
+      </div>
+      <div class="totals">
+        <div class="row"><span>Nombre de factures</span><span id="lg_count">0</span></div>
+        <div class="row final"><span>Total général (DZD)</span><span id="lg_total">0,00</span></div>
+      </div>
+    </div>
+    <div class="actions-bar">
+      <button class="btn btn-ghost" id="lgCancelBtn">← Annuler</button>
+      <button class="btn btn-primary" id="lgGenerateBtn">Enregistrer &amp; générer les factures</button>
+    </div>
+  </div>
+
+  <!-- ================= LIVREUR : FEUILLE D'IMPRESSION ================= -->
+  <div class="view" id="view-livreurSheet">
+    <div class="actions-bar no-print" style="justify-content:space-between; margin-bottom:16px;">
+      <button class="btn btn-ghost" id="lvBackFromSheetBtn">← Retour</button>
+      <button class="btn btn-primary" id="lvPrintBtn">🖨 Imprimer / Exporter en PDF</button>
+    </div>
+    <div id="livreurSheet"></div>
   </div>
 
   <!-- ================= HISTORIQUE ================= -->
@@ -2068,18 +2245,615 @@ async function reopenFacture(key){
   switchView('sheet');
 }
 
+// ================= FACTURE LIVREUR (section indépendante) =================
+const WILAYAS = [
+  ['01','Adrar'],['02','Chlef'],['03','Laghouat'],['04','Oum El Bouaghi'],['05','Batna'],['06','Béjaïa'],['07','Biskra'],['08','Béchar'],['09','Blida'],['10','Bouira'],
+  ['11','Tamanrasset'],['12','Tébessa'],['13','Tlemcen'],['14','Tiaret'],['15','Tizi Ouzou'],['16','Alger'],['17','Djelfa'],['18','Jijel'],['19','Sétif'],['20','Saïda'],
+  ['21','Skikda'],['22','Sidi Bel Abbès'],['23','Annaba'],['24','Guelma'],['25','Constantine'],['26','Médéa'],['27','Mostaganem'],['28','M’Sila'],['29','Mascara'],['30','Ouargla'],
+  ['31','Oran'],['32','El Bayadh'],['33','Illizi'],['34','Bordj Bou Arréridj'],['35','Boumerdès'],['36','El Tarf'],['37','Tindouf'],['38','Tissemsilt'],['39','El Oued'],['40','Khenchela'],
+  ['41','Souk Ahras'],['42','Tipaza'],['43','Mila'],['44','Aïn Defla'],['45','Naâma'],['46','Aïn Témouchent'],['47','Ghardaïa'],['48','Relizane'],['49','Timimoun'],['50','Bordj Badji Mokhtar'],
+  ['51','Ouled Djellal'],['52','Béni Abbès'],['53','In Salah'],['54','In Guezzam'],['55','Touggourt'],['56','Djanet'],['57','El M’Ghair'],['58','El Meniaa']
+];
+const LV_CLIENT = { nom:'SPA GUEPEX', rc:'19B0243810-16/00', nif:'001907024381063', nis:'001907010000766', adresse:"Zone d'activité Dar El Beida Lot N° 147, 148, 149 Dar El Beida" };
+const LV_DEFAULT_ACTIVITE = 'Livreur à vélo ou à scooter';
+const LV_DEFAULT_PU = 150;
+const LV_MIN_ROWS = 14;
+const lvEsc = (s)=>String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const lvWilayaName = (code)=>{ const w = WILAYAS.find(x=>x[0]===code); return w ? w[1] : ''; };
+
+// ---------- accès base ----------
+let livreursCache = [];
+async function fetchLivreurs(){
+  try{
+    const { data, error } = await sb.from('livreurs').select('*').order('nom', { ascending:true });
+    livreursCache = (error || !data) ? [] : data;
+  }catch(e){ console.error(e); livreursCache = []; }
+  return livreursCache;
+}
+async function upsertLivreur(p){
+  try{
+    const { data, error } = await sb.from('livreurs').upsert({
+      nom_norm: norm(p.nom), nom: p.nom, wilaya_code: p.wilayaCode, wilaya: p.wilaya,
+      activite: p.activite, adresse: p.adresse, nif: p.nif, immatriculation: p.immatriculation,
+      prix_unitaire: p.prixUnitaire, updated_at: new Date().toISOString()
+    }, { onConflict:'nom_norm,wilaya_code' }).select().single();
+    if(error){ console.error(error); return null; }
+    return data;
+  }catch(e){ console.error(e); return null; }
+}
+async function reserveLivreurNumber(livreurId, year){
+  try{
+    const { data, error } = await sb.rpc('next_livreur_number', { p_livreur: livreurId, p_annee: year });
+    if(error){ console.error(error); return null; }
+    return data;
+  }catch(e){ console.error(e); return null; }
+}
+async function previewLivreurNumber(livreurId, year){
+  try{
+    if(!livreurId) return 1;
+    const { data } = await sb.from('compteurs_livreur').select('dernier_numero').eq('livreur_id', livreurId).eq('annee', year).maybeSingle();
+    return data ? data.dernier_numero + 1 : 1;
+  }catch(e){ return 1; }
+}
+function lvFormatNumero(n, year){ return String(year).slice(-2) + '/' + String(n).padStart(5,'0'); }
+function lvRecFromDb(r){
+  return {
+    key:r.key, numero:r.numero, date:r.date, livreurId:r.livreur_id, livreurNom:r.livreur_nom,
+    wilayaCode:r.wilaya_code, wilaya:r.wilaya, activite:r.activite||'', adresse:r.adresse||'',
+    nif:r.nif||'', immatriculation:r.immatriculation||'', rows:r.rows||[], totals:r.totals||{},
+    statut:r.statut||'non_paye', montantPartiel:r.montant_partiel||0, remarque:r.remarque||'',
+    createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||''
+  };
+}
+async function fetchFacturesLivreur(){
+  try{
+    const { data, error } = await sb.from('factures_livreur').select('*').order('date', { ascending:false }).order('numero', { ascending:false });
+    if(error || !data) return [];
+    return data.map(lvRecFromDb);
+  }catch(e){ console.error(e); return []; }
+}
+async function updateFactureLivreur(key, payload){
+  try{
+    const { error } = await sb.from('factures_livreur').update(payload).eq('key', key);
+    if(error){ console.error(error); toast('Erreur de mise à jour'); return false; }
+    return true;
+  }catch(e){ console.error(e); toast('Erreur de mise à jour'); return false; }
+}
+
+// ---------- formulaire ----------
+let lvRows = [];
+let lvCurrentLivreur = null;   // livreur enregistré correspondant au nom saisi (ou null)
+let currentLivreurFacture = null;
+let lvSheetBack = 'livreur';
+
+function lvRowMontant(r){ return Math.round(((r.qte||0) * (r.pu||0)) * 100) / 100; }
+function lvTotal(){ return Math.round(lvRows.reduce((s,r)=>s + lvRowMontant(r), 0) * 100) / 100; }
+
+async function openLivreurForm(){
+  await fetchLivreurs();
+  const sel = document.getElementById('lv_wilaya');
+  if(!sel.options.length){
+    sel.innerHTML = '<option value="">— Choisir la wilaya —</option>' + WILAYAS.map(([c,n])=>`<option value="${c}">${c} – ${lvEsc(n)}</option>`).join('');
+  }
+  sel.value = '';
+  ['lv_nom','lv_adresse','lv_nif','lv_immat'].forEach(id=>document.getElementById(id).value = '');
+  document.getElementById('lv_activite').value = LV_DEFAULT_ACTIVITE;
+  document.getElementById('lv_date').value = todayISO();
+  lvCurrentLivreur = null;
+  lvRows = [{ description:'Livraison colis', qte:0, pu:LV_DEFAULT_PU }];
+  lvRefreshNomList();
+  lvRenderRows();
+  lvRefreshNumeroPreview();
+  switchView('livreurForm');
+}
+function lvRefreshNomList(){
+  const code = document.getElementById('lv_wilaya').value;
+  const list = livreursCache.filter(l=>!code || l.wilaya_code===code);
+  document.getElementById('lvNomList').innerHTML = list.map(l=>`<option value="${lvEsc(l.nom)}"></option>`).join('');
+}
+async function lvRefreshNumeroPreview(){
+  const dateVal = document.getElementById('lv_date').value || todayISO();
+  const year = parseInt(dateVal.slice(0,4)) || new Date().getFullYear();
+  const next = await previewLivreurNumber(lvCurrentLivreur ? lvCurrentLivreur.id : null, year);
+  document.getElementById('lv_numero').value = lvFormatNumero(next, year);
+}
+function lvMatchLivreur(){
+  const code = document.getElementById('lv_wilaya').value;
+  const nom = document.getElementById('lv_nom').value.trim();
+  if(!code || !nom) return null;
+  return livreursCache.find(l=>l.wilaya_code===code && l.nom_norm===norm(nom)) || null;
+}
+function lvOnIdentityChange(){
+  const found = lvMatchLivreur();
+  const changed = (found ? found.id : null) !== (lvCurrentLivreur ? lvCurrentLivreur.id : null);
+  lvCurrentLivreur = found;
+  if(found && changed){
+    document.getElementById('lv_activite').value = found.activite || LV_DEFAULT_ACTIVITE;
+    document.getElementById('lv_adresse').value = found.adresse || '';
+    document.getElementById('lv_nif').value = found.nif || '';
+    document.getElementById('lv_immat').value = found.immatriculation || '';
+    if(found.prix_unitaire){
+      lvRows.forEach(r=>{ if(r.description==='Livraison colis') r.pu = parseFloat(found.prix_unitaire)||r.pu; });
+      lvRenderRows();
+    }
+  }
+  if(changed) lvRefreshNumeroPreview();
+}
+document.getElementById('lv_wilaya').onchange = ()=>{ lvRefreshNomList(); lvOnIdentityChange(); };
+document.getElementById('lv_nom').oninput = lvOnIdentityChange;
+document.getElementById('lv_date').onchange = lvRefreshNumeroPreview;
+
+function lvRenderRows(){
+  const inp = 'border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;';
+  document.getElementById('lvRowsBody').innerHTML = lvRows.map((r,i)=>`
+    <tr>
+      <td><input type="text" value="${lvEsc(r.description)}" oninput="lvUpdateRow(${i},'description',this.value)" style="width:240px; ${inp}"></td>
+      <td class="num"><input type="number" min="0" step="1" value="${r.qte||0}" oninput="lvUpdateRow(${i},'qte',this.value)" style="width:90px; text-align:right; ${inp}"></td>
+      <td class="num"><input type="number" min="0" step="0.01" value="${r.pu||0}" oninput="lvUpdateRow(${i},'pu',this.value)" style="width:100px; text-align:right; ${inp}"></td>
+      <td class="num" id="lvMontant-${i}">${fmtNum(lvRowMontant(r))}</td>
+      <td>${lvRows.length>1 ? `<button class="rm-btn" onclick="lvRemoveRow(${i})" title="Retirer">✕</button>` : ''}</td>
+    </tr>`).join('');
+  lvUpdateTotals();
+}
+function lvUpdateRow(i, field, value){
+  const r = lvRows[i]; if(!r) return;
+  if(field==='description') r.description = value;
+  else r[field] = parseFloat(value)||0;
+  const cell = document.getElementById('lvMontant-'+i);
+  if(cell) cell.textContent = fmtNum(lvRowMontant(r));
+  lvUpdateTotals();
+}
+function lvRemoveRow(i){ lvRows.splice(i,1); if(!lvRows.length) lvRows.push({ description:'Livraison colis', qte:0, pu:LV_DEFAULT_PU }); lvRenderRows(); }
+document.getElementById('lvAddLineBtn').onclick = ()=>{
+  const last = lvRows[lvRows.length-1] || {};
+  lvRows.push({ description:'Livraison colis', qte:0, pu:last.pu || LV_DEFAULT_PU });
+  lvRenderRows();
+};
+function lvUpdateTotals(){
+  const total = lvTotal();
+  document.getElementById('lv_total').textContent = fmtNum(total);
+  document.getElementById('lv_letters').textContent = 'Arrêtée la présente facture à la somme de : ' + lvWords(total);
+}
+function lvWords(n){
+  return numberToFrenchWords(n).split(' ').map(w=>w.charAt(0).toUpperCase()+w.slice(1)).join(' ');
+}
+document.getElementById('lvCancelBtn').onclick = ()=>switchView('livreur');
+document.getElementById('lvNewBtn').onclick = openLivreurForm;
+
+// Création d'une facture livreur (utilisée par la facture simple et par la facturation groupée)
+async function lvCreateInvoice(d){
+  const profile = {
+    nom:d.nom, wilayaCode:d.wilayaCode, wilaya:lvWilayaName(d.wilayaCode),
+    activite:d.activite, adresse:d.adresse, nif:d.nif, immatriculation:d.immatriculation, prixUnitaire:d.rows[0].pu
+  };
+  const livreur = await upsertLivreur(profile);
+  if(!livreur) return { error:"Erreur d'enregistrement du livreur." };
+  const year = parseInt(d.dateVal.slice(0,4));
+  const n = await reserveLivreurNumber(livreur.id, year);
+  if(n === null) return { error:'Erreur lors de la réservation du numéro de facture.' };
+  const numero = lvFormatNumero(n, year);
+  const key = 'LV_' + livreur.id.replace(/-/g,'').slice(0,8) + '_' + numero.replace(/[^a-zA-Z0-9]/g,'_');
+  const total = Math.round(d.rows.reduce((s,r)=>s+r.montant, 0) * 100) / 100;
+  const record = {
+    key, numero, date:d.dateVal, livreurId:livreur.id, livreurNom:d.nom,
+    wilayaCode:d.wilayaCode, wilaya:profile.wilaya, activite:d.activite, adresse:d.adresse,
+    nif:d.nif, immatriculation:d.immatriculation,
+    rows:d.rows, totals:{ payer:total }, createdByName:currentDisplayName
+  };
+  const { error } = await sb.from('factures_livreur').insert({
+    key, numero, date:d.dateVal, livreur_id:livreur.id, livreur_nom:d.nom,
+    wilaya_code:d.wilayaCode, wilaya:profile.wilaya, activite:d.activite, adresse:d.adresse,
+    nif:d.nif, immatriculation:d.immatriculation,
+    rows:d.rows, totals:record.totals, created_by_name:currentDisplayName || null
+  });
+  if(error){
+    console.error(error);
+    return { error: error.code === '23505' ? 'Ce numéro existe déjà pour ce livreur — réessayez.' : "Erreur d'enregistrement Supabase" };
+  }
+  return { record };
+}
+
+document.getElementById('lvGenerateBtn').onclick = async ()=>{
+  const wilayaCode = document.getElementById('lv_wilaya').value;
+  const nom = document.getElementById('lv_nom').value.trim();
+  const dateVal = document.getElementById('lv_date').value;
+  if(!wilayaCode){ toast('Choisissez la wilaya.'); return; }
+  if(!nom){ toast('Le nom du livreur est requis.'); return; }
+  if(!dateVal){ toast('La date est requise.'); return; }
+  const rows = lvRows.filter(r=>(r.description||'').trim() || r.qte || r.pu).map(r=>({ description:(r.description||'').trim(), qte:r.qte||0, pu:r.pu||0, montant:lvRowMontant(r) }));
+  const total = lvTotal();
+  if(!rows.length || total <= 0){ toast('Saisissez au moins une ligne avec une quantité et un prix.'); return; }
+
+  const btn = document.getElementById('lvGenerateBtn');
+  btn.disabled = true; btn.textContent = 'Enregistrement...';
+  try{
+    const res = await lvCreateInvoice({
+      nom, wilayaCode, dateVal, rows,
+      activite: document.getElementById('lv_activite').value.trim(),
+      adresse: document.getElementById('lv_adresse').value.trim(),
+      nif: document.getElementById('lv_nif').value.trim(),
+      immatriculation: document.getElementById('lv_immat').value.trim()
+    });
+    if(res.error){ toast(res.error); return; }
+    document.getElementById('lv_numero').value = res.record.numero;
+    currentLivreurFacture = res.record;
+    lvSheetBack = 'livreurForm';
+    document.getElementById('livreurSheet').innerHTML = livreurSheetHTML(res.record);
+    switchView('livreurSheet');
+    toast('Facture enregistrée');
+  } finally {
+    btn.disabled = false; btn.textContent = 'Enregistrer & générer la facture';
+  }
+};
+
+// ---------- facturation groupée par wilaya ----------
+let lgRows = [];
+function lgNewRow(){ return { nom:'', activite:LV_DEFAULT_ACTIVITE, adresse:'', nif:'', immat:'', qte:0, pu:LV_DEFAULT_PU, matchId:null }; }
+async function openLivreurGroupForm(){
+  await fetchLivreurs();
+  const sel = document.getElementById('lg_wilaya');
+  sel.innerHTML = '<option value="">— Choisir la wilaya —</option>' + WILAYAS.map(([c,n])=>`<option value="${c}">${c} – ${lvEsc(n)}</option>`).join('');
+  sel.value = '';
+  document.getElementById('lg_date').value = todayISO();
+  lgRows = [lgNewRow(), lgNewRow()];
+  lgRefreshNomList();
+  lgRenderRows();
+  switchView('livreurGroup');
+}
+function lgRefreshNomList(){
+  const code = document.getElementById('lg_wilaya').value;
+  document.getElementById('lgNomList').innerHTML = livreursCache.filter(l=>!code || l.wilaya_code===code).map(l=>`<option value="${lvEsc(l.nom)}"></option>`).join('');
+}
+function lgMontant(r){ return Math.round(((r.qte||0)*(r.pu||0))*100)/100; }
+function lgRenderRows(){
+  const inp = 'border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;';
+  document.getElementById('lgRowsBody').innerHTML = lgRows.map((r,i)=>`
+    <tr>
+      <td><input id="lg-nom-${i}" list="lgNomList" autocomplete="off" type="text" value="${lvEsc(r.nom)}" oninput="lgUpdateRow(${i},'nom',this.value)" style="width:180px; ${inp}"></td>
+      <td><input id="lg-activite-${i}" type="text" value="${lvEsc(r.activite)}" oninput="lgUpdateRow(${i},'activite',this.value)" style="width:170px; ${inp}"></td>
+      <td><input id="lg-adresse-${i}" type="text" value="${lvEsc(r.adresse)}" oninput="lgUpdateRow(${i},'adresse',this.value)" style="width:200px; ${inp}"></td>
+      <td><input id="lg-nif-${i}" type="text" value="${lvEsc(r.nif)}" oninput="lgUpdateRow(${i},'nif',this.value)" style="width:150px; ${inp}"></td>
+      <td><input id="lg-immat-${i}" type="text" value="${lvEsc(r.immat)}" oninput="lgUpdateRow(${i},'immat',this.value)" style="width:150px; ${inp}"></td>
+      <td class="num"><input id="lg-qte-${i}" type="number" min="0" step="1" value="${r.qte||0}" oninput="lgUpdateRow(${i},'qte',this.value)" style="width:80px; text-align:right; ${inp}"></td>
+      <td class="num"><input id="lg-pu-${i}" type="number" min="0" step="0.01" value="${r.pu||0}" oninput="lgUpdateRow(${i},'pu',this.value)" style="width:90px; text-align:right; ${inp}"></td>
+      <td class="num" id="lg-montant-${i}">${fmtNum(lgMontant(r))}</td>
+      <td>${lgRows.length>1 ? `<button class="rm-btn" onclick="lgRemoveRow(${i})" title="Retirer">✕</button>` : ''}</td>
+    </tr>`).join('');
+  lgUpdateTotals();
+}
+function lgUpdateRow(i, field, value){
+  const r = lgRows[i]; if(!r) return;
+  if(field==='qte' || field==='pu') r[field] = parseFloat(value)||0;
+  else r[field] = value;
+  if(field==='nom'){
+    const code = document.getElementById('lg_wilaya').value;
+    const found = code && value.trim() ? livreursCache.find(l=>l.wilaya_code===code && l.nom_norm===norm(value)) : null;
+    if((found ? found.id : null) !== r.matchId){
+      r.matchId = found ? found.id : null;
+      if(found){
+        r.activite = found.activite || LV_DEFAULT_ACTIVITE; r.adresse = found.adresse || '';
+        r.nif = found.nif || ''; r.immat = found.immatriculation || '';
+        if(found.prix_unitaire) r.pu = parseFloat(found.prix_unitaire) || r.pu;
+        [['activite',r.activite],['adresse',r.adresse],['nif',r.nif],['immat',r.immat],['pu',r.pu]].forEach(([f,v])=>{ const el = document.getElementById(`lg-${f}-${i}`); if(el) el.value = v; });
+      }
+    }
+  }
+  const cell = document.getElementById('lg-montant-'+i);
+  if(cell) cell.textContent = fmtNum(lgMontant(r));
+  lgUpdateTotals();
+}
+function lgRemoveRow(i){ lgRows.splice(i,1); if(!lgRows.length) lgRows.push(lgNewRow()); lgRenderRows(); }
+function lgUpdateTotals(){
+  const active = lgRows.filter(r=>r.nom.trim() && r.qte>0);
+  document.getElementById('lg_count').textContent = active.length;
+  document.getElementById('lg_total').textContent = fmtNum(active.reduce((s,r)=>s+lgMontant(r),0));
+}
+document.getElementById('lg_wilaya').onchange = ()=>{
+  lgRefreshNomList();
+  lgRows.forEach((r,i)=>{ r.matchId = null; lgUpdateRow(i,'nom',r.nom); });
+};
+document.getElementById('lgAddBtn').onclick = ()=>{ lgRows.push(lgNewRow()); lgRenderRows(); };
+document.getElementById('lgCancelBtn').onclick = ()=>switchView('livreur');
+document.getElementById('lvGroupBtn').onclick = openLivreurGroupForm;
+
+document.getElementById('lgGenerateBtn').onclick = async ()=>{
+  const wilayaCode = document.getElementById('lg_wilaya').value;
+  const dateVal = document.getElementById('lg_date').value;
+  if(!wilayaCode){ toast('Choisissez la wilaya.'); return; }
+  if(!dateVal){ toast('La date est requise.'); return; }
+  const filled = lgRows.filter(r=>r.nom.trim() || r.qte || r.adresse.trim() || r.nif.trim() || r.immat.trim());
+  if(!filled.length){ toast('Ajoutez au moins un livreur.'); return; }
+  for(const r of filled){
+    if(!r.nom.trim()){ toast('Un livreur n\'a pas de nom.'); return; }
+    if(!(r.qte>0) || !(r.pu>0)){ toast(`Quantité et prix requis pour « ${r.nom.trim()} ».`); return; }
+  }
+  const names = filled.map(r=>norm(r.nom));
+  if(new Set(names).size !== names.length){ toast('Un même livreur apparaît deux fois dans la liste.'); return; }
+
+  const btn = document.getElementById('lgGenerateBtn');
+  btn.disabled = true;
+  const records = [];
+  try{
+    for(let k=0; k<filled.length; k++){
+      const r = filled[k];
+      btn.textContent = `Enregistrement ${k+1}/${filled.length}...`;
+      const res = await lvCreateInvoice({
+        nom:r.nom.trim(), wilayaCode, dateVal,
+        activite:r.activite.trim(), adresse:r.adresse.trim(), nif:r.nif.trim(), immatriculation:r.immat.trim(),
+        rows:[{ description:'Livraison colis', qte:r.qte, pu:r.pu, montant:lgMontant(r) }]
+      });
+      if(res.error){ toast(`« ${r.nom.trim()} » : ${res.error}` + (records.length ? ` (${records.length} facture(s) déjà enregistrée(s), consultez l'onglet Livreur)` : '')); break; }
+      records.push(res.record);
+    }
+  } finally {
+    btn.disabled = false; btn.textContent = 'Enregistrer & générer les factures';
+  }
+  if(!records.length) return;
+  lvSheetBack = 'livreur';
+  document.getElementById('livreurSheet').innerHTML = records.map(livreurSheetHTML).join('');
+  switchView('livreurSheet');
+  toast(`${records.length} facture(s) enregistrée(s)`);
+};
+
+// impression groupée des factures filtrées (une page par facture)
+document.getElementById('lvPrintAllBtn').onclick = async ()=>{
+  if(!lvFiltered.length){ toast('Aucune facture à imprimer.'); return; }
+  if(lvFiltered.length > 60){
+    const ok = await showConfirmModal(`Imprimer ${lvFiltered.length} factures en une seule fois ?`, 'Imprimer');
+    if(!ok) return;
+  }
+  const sorted = [...lvFiltered].sort((a,b)=> a.wilayaCode.localeCompare(b.wilayaCode) || a.livreurNom.localeCompare(b.livreurNom,'fr') || a.numero.localeCompare(b.numero));
+  lvSheetBack = 'livreur';
+  document.getElementById('livreurSheet').innerHTML = sorted.map(livreurSheetHTML).join('');
+  switchView('livreurSheet');
+};
+
+// ---------- feuille d'impression (modèle auto-entrepreneur) ----------
+function livreurSheetHTML(rec){
+  const rows = rec.rows || [];
+  const total = (rec.totals && rec.totals.payer) || 0;
+  const count = Math.max(LV_MIN_ROWS, rows.length);
+  let body = '';
+  for(let i=0; i<count; i++){
+    const r = rows[i];
+    body += r
+      ? `<tr><td>${lvEsc(r.description)}</td><td>${r.qte}</td><td class="num">${fmtNum(r.pu)}</td><td class="num">${fmtNum(r.montant)}</td></tr>`
+      : '<tr><td>&nbsp;</td><td></td><td></td><td></td></tr>';
+  }
+  return `<div class="lv-page">
+    <div class="lv-title">FACTURE</div>
+    <table class="lv-info">
+      <tr><td class="k">AUTO - ENTREPRENEUR :</td><td class="v">${lvEsc(rec.livreurNom)}</td><td class="side"></td></tr>
+      <tr><td class="k">Activité :</td><td class="v">${lvEsc(rec.activite)}</td><td class="side">Date : ${fmtDateDMY(rec.date)}</td></tr>
+      <tr><td class="k">Adresse :</td><td class="v">${lvEsc(rec.adresse)}</td><td class="side">Facture N° ${lvEsc(rec.numero)}</td></tr>
+      <tr><td class="k">NIF :</td><td class="v">${lvEsc(rec.nif)}</td><td class="side"></td></tr>
+      <tr><td class="k">N° D'immatriculation :</td><td class="v">${lvEsc(rec.immatriculation)}</td><td class="side"></td></tr>
+    </table>
+    <div class="lv-bar">Facturer à :</div>
+    <div class="lv-client">
+      <div><b>Client : ${lvEsc(LV_CLIENT.nom)}</b></div>
+      <div>RC : ${lvEsc(LV_CLIENT.rc)}</div>
+      <div>NIF : ${lvEsc(LV_CLIENT.nif)}</div>
+      <div>NIS : ${lvEsc(LV_CLIENT.nis)}</div>
+      <div>Adresse : ${lvEsc(LV_CLIENT.adresse)}</div>
+    </div>
+    <table class="lv-table">
+      <thead><tr><th style="width:40%;">Description</th><th>Quantité</th><th>Prix unitaire</th><th>Montant</th></tr></thead>
+      <tbody>${body}</tbody>
+    </table>
+    <div class="lv-total"><span>TOTAL DZD</span><span>${fmtNum(total)}</span></div>
+    <div class="lv-words"><b>Arrêtée la présente facture à la somme de</b>${lvEsc(lvWords(total))}</div>
+  </div>`;
+}
+document.getElementById('lvBackFromSheetBtn').onclick = ()=>switchView(lvSheetBack);
+document.getElementById('lvPrintBtn').onclick = ()=>window.print();
+
+// ---------- onglet Livreur : historique ----------
+let lvAll = [];
+let lvPage = 0;
+const LV_PAGE_SIZE = 50;
+let lvFiltered = [];
+
+async function renderLivreurTab(){
+  const [rows] = await Promise.all([fetchFacturesLivreur(), fetchLivreurs()]);
+  lvAll = rows;
+  lvPopulateFilters();
+  lvPage = 0;
+  lvApplyFilters();
+}
+function lvPopulateFilters(){
+  const wSel = document.getElementById('lvWilayaFilter'), lSel = document.getElementById('lvLivreurFilter'), mSel = document.getElementById('lvMonthFilter');
+  const curW = wSel.value, curL = lSel.value, curM = mSel.value;
+  const codes = [...new Set(lvAll.map(e=>e.wilayaCode))].sort();
+  wSel.innerHTML = '<option value="">Toutes les wilayas</option>' + codes.map(c=>`<option value="${c}">${c} – ${lvEsc(lvWilayaName(c))}</option>`).join('');
+  if(codes.includes(curW)) wSel.value = curW;
+  lvPopulateLivreurFilter(curL);
+  const months = [...new Set(lvAll.map(e=>(e.date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  mSel.innerHTML = '<option value="">Tous les mois</option>' + months.map(m=>{ const [y,mo] = m.split('-'); return `<option value="${m}">${MONTH_LABELS[mo]||mo} ${y}</option>`; }).join('');
+  if(months.includes(curM)) mSel.value = curM;
+}
+function lvPopulateLivreurFilter(keep){
+  const w = document.getElementById('lvWilayaFilter').value;
+  const lSel = document.getElementById('lvLivreurFilter');
+  const names = [...new Set(lvAll.filter(e=>!w || e.wilayaCode===w).map(e=>e.livreurNom))].sort((a,b)=>a.localeCompare(b,'fr'));
+  lSel.innerHTML = '<option value="">Tous les livreurs</option>' + names.map(n=>`<option value="${lvEsc(n)}">${lvEsc(n)}</option>`).join('');
+  if(keep && names.includes(keep)) lSel.value = keep;
+}
+function lvCurrentFilters(){
+  return {
+    q: norm(document.getElementById('lvSearch').value),
+    wilaya: document.getElementById('lvWilayaFilter').value,
+    livreur: document.getElementById('lvLivreurFilter').value,
+    statut: document.getElementById('lvStatutFilter').value,
+    month: document.getElementById('lvMonthFilter').value
+  };
+}
+function lvApplyFilters(){
+  const f = lvCurrentFilters();
+  lvFiltered = lvAll.filter(e=>{
+    if(f.wilaya && e.wilayaCode!==f.wilaya) return false;
+    if(f.livreur && e.livreurNom!==f.livreur) return false;
+    if(f.statut && e.statut!==f.statut) return false;
+    if(f.month && (e.date||'').slice(0,7)!==f.month) return false;
+    if(f.q && !(norm(e.numero).includes(f.q) || norm(e.livreurNom).includes(f.q))) return false;
+    return true;
+  });
+  lvRenderTable();
+}
+document.getElementById('lvWilayaFilter').onchange = ()=>{ lvPopulateLivreurFilter(''); lvPage = 0; lvApplyFilters(); };
+['lvLivreurFilter','lvStatutFilter','lvMonthFilter'].forEach(id=>{ document.getElementById(id).onchange = ()=>{ lvPage = 0; lvApplyFilters(); }; });
+let lvSearchDebounce = null;
+document.getElementById('lvSearch').addEventListener('input', ()=>{ clearTimeout(lvSearchDebounce); lvSearchDebounce = setTimeout(()=>{ lvPage = 0; lvApplyFilters(); }, 250); });
+document.getElementById('lvPagerPrev').onclick = ()=>{ if(lvPage>0){ lvPage--; lvRenderTable(); } };
+document.getElementById('lvPagerNext').onclick = ()=>{ if((lvPage+1)*LV_PAGE_SIZE < lvFiltered.length){ lvPage++; lvRenderTable(); } };
+
+function lvPaid(e){ return e.statut==='paye' ? ((e.totals&&e.totals.payer)||0) : (e.statut==='partiel' ? (e.montantPartiel||0) : 0); }
+function lvQty(e){ return (e.rows||[]).reduce((s,r)=>s+(r.qte||0), 0); }
+function lvRenderTable(){
+  const body = document.getElementById('lvHistBody');
+  const table = document.getElementById('lvHistTable');
+  const empty = document.getElementById('lvHistEmpty');
+  const totalFact = lvFiltered.reduce((s,e)=>s+((e.totals&&e.totals.payer)||0), 0);
+  const totalPaid = lvFiltered.reduce((s,e)=>s+lvPaid(e), 0);
+  const stat = (label, val, color)=>`<div><span style="color:var(--slate); font-weight:600;">${label}</span> <b style="${color?('color:'+color+';'):''}">${val}</b></div>`;
+  document.getElementById('lvSummary').innerHTML =
+    stat('Factures', lvFiltered.length) + stat('Total facturé', fmtNum(totalFact)+' DA') + stat('Payé', fmtNum(totalPaid)+' DA', 'var(--ok)') + stat('Reste à payer', fmtNum(Math.max(totalFact-totalPaid,0))+' DA', 'var(--red)');
+  if(!lvFiltered.length){
+    body.innerHTML = ''; table.style.display = 'none'; empty.style.display = '';
+    document.getElementById('lvPager').style.display = 'none';
+    return;
+  }
+  empty.style.display = 'none'; table.style.display = '';
+  const pageRows = lvFiltered.slice(lvPage*LV_PAGE_SIZE, (lvPage+1)*LV_PAGE_SIZE);
+  body.innerHTML = pageRows.map(e=>{
+    const paye = e.statut==='paye', partiel = e.statut==='partiel';
+    const total = (e.totals&&e.totals.payer)||0;
+    const selColor = paye ? '#1E7A44' : (partiel ? '#B8860B' : 'var(--line)');
+    const selBg = paye ? 'var(--ok-bg)' : (partiel ? 'var(--warn-bg)' : '#fff');
+    const selText = paye ? 'var(--ok)' : (partiel ? 'var(--warn)' : 'var(--slate)');
+    return `<tr>
+      <td>${lvEsc(e.numero)}</td>
+      <td>${fmtDateDMY(e.date)}</td>
+      <td>${lvEsc(e.wilayaCode)} – ${lvEsc(e.wilaya)}</td>
+      <td style="font-weight:600;">${lvEsc(e.livreurNom)}</td>
+      <td class="num">${lvQty(e)}</td>
+      <td class="num">${fmtNum(total)} DA</td>
+      <td>
+        <select onchange="lvOnStatut('${e.key}', this.value)" style="border:1px solid ${selColor}; background:${selBg}; color:${selText}; border-radius:6px; padding:5px 8px; font:inherit; font-weight:600; cursor:pointer;">
+          <option value="non_paye" ${!paye&&!partiel?'selected':''}>Impayé</option>
+          <option value="partiel" ${partiel?'selected':''}>Payé partiellement</option>
+          <option value="paye" ${paye?'selected':''}>Payé</option>
+        </select>
+        ${partiel ? `<span style="margin-left:6px; display:inline-flex; align-items:center; gap:4px;">
+          <input type="number" min="0" step="0.01" value="${e.montantPartiel||0}" oninput="lvUpdateReste('${e.key}', this.value)" onchange="lvOnPartial('${e.key}', this.value)" style="width:110px; border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit;">
+          <span style="font-size:12px; color:var(--slate); font-weight:600;">DA</span>
+          <span style="font-size:12px; color:var(--red); font-weight:700;">Reste : <span id="lvReste-${e.key}">${fmtNum(Math.max(total-(e.montantPartiel||0),0))}</span> DA</span>
+        </span>` : ''}
+      </td>
+      <td><textarea onchange="lvOnRemarque('${e.key}', this.value)" placeholder="Remarque..." rows="1" style="width:160px; min-height:32px; resize:vertical; border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; font-size:12px; color:var(--ink);">${lvEsc(e.remarque)}</textarea></td>
+      <td><span style="font-size:12.5px; color:var(--slate);">${lvEsc(e.createdByName) || '—'}</span></td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="lvReopen('${e.key}')">Revoir / Imprimer</button>
+        <button class="btn btn-ghost btn-sm" onclick="lvEditNumero('${e.key}')" title="Modifier le numéro et la date de facture">✎ N°/Date</button>
+      </td>
+    </tr>`;
+  }).join('');
+  const pager = document.getElementById('lvPager');
+  const totalPages = Math.max(1, Math.ceil(lvFiltered.length/LV_PAGE_SIZE));
+  if(lvFiltered.length <= LV_PAGE_SIZE){ pager.style.display = 'none'; }
+  else {
+    pager.style.display = 'flex';
+    document.getElementById('lvPagerInfo').textContent = `Page ${lvPage+1} sur ${totalPages} — ${lvFiltered.length} facture(s)`;
+    document.getElementById('lvPagerPrev').disabled = lvPage===0;
+    document.getElementById('lvPagerNext').disabled = (lvPage+1)>=totalPages;
+  }
+}
+function lvFind(key){ return lvAll.find(e=>e.key===key); }
+async function lvOnStatut(key, statut){
+  const e = lvFind(key); if(!e) return;
+  const payload = { statut, montant_partiel: statut==='partiel' ? (e.montantPartiel||0) : null };
+  if(await updateFactureLivreur(key, payload)){ e.statut = statut; e.montantPartiel = payload.montant_partiel || 0; }
+  lvApplyFilters();
+}
+function lvUpdateReste(key, value){
+  const e = lvFind(key); if(!e) return;
+  const el = document.getElementById('lvReste-'+key);
+  if(el) el.textContent = fmtNum(Math.max(((e.totals&&e.totals.payer)||0) - (parseFloat(value)||0), 0));
+}
+async function lvOnPartial(key, value){
+  const e = lvFind(key); if(!e) return;
+  const v = parseFloat(value)||0;
+  if(await updateFactureLivreur(key, { statut:'partiel', montant_partiel:v })){ e.statut = 'partiel'; e.montantPartiel = v; }
+  lvApplyFilters();
+}
+async function lvOnRemarque(key, value){
+  const e = lvFind(key);
+  if(await updateFactureLivreur(key, { remarque: value }) && e) e.remarque = value;
+}
+async function lvReopen(key){
+  const e = lvFind(key); if(!e){ toast('Introuvable.'); return; }
+  currentLivreurFacture = e;
+  lvSheetBack = 'livreur';
+  document.getElementById('livreurSheet').innerHTML = livreurSheetHTML(e);
+  switchView('livreurSheet');
+}
+async function lvEditNumero(key){
+  const e = lvFind(key); if(!e) return;
+  const result = await showEditFactureModal(e.numero, e.date);
+  if(!result) return;
+  const { numero: newNumero, date: newDate } = result;
+  if(!newNumero){ toast('Le numéro de facture est requis.'); return; }
+  const numeroChanged = newNumero !== e.numero, dateChanged = newDate !== e.date;
+  if(!numeroChanged && !dateChanged) return;
+  if(numeroChanged){
+    const { data: existing, error } = await sb.from('factures_livreur').select('key').eq('livreur_id', e.livreurId).eq('numero', newNumero).neq('key', key).limit(1);
+    if(error){ toast('Erreur de vérification.'); return; }
+    if(existing && existing.length){ toast('Ce numéro est déjà utilisé par une autre facture de ce livreur.'); return; }
+  }
+  const payload = {};
+  if(numeroChanged) payload.numero = newNumero;
+  if(dateChanged) payload.date = newDate;
+  if(await updateFactureLivreur(key, payload)){
+    if(numeroChanged) e.numero = newNumero;
+    if(dateChanged) e.date = newDate;
+    toast('Facture mise à jour.');
+    lvApplyFilters();
+  }
+}
+document.getElementById('lvExportBtn').onclick = ()=>{
+  if(!lvFiltered.length){ toast('Aucune facture à exporter.'); return; }
+  const data = lvFiltered.map(e=>{
+    const total = (e.totals&&e.totals.payer)||0, paid = lvPaid(e);
+    return {
+      'Facture N°': e.numero, 'Date': fmtDateDMY(e.date), 'Wilaya': `${e.wilayaCode} - ${e.wilaya}`, 'Livreur': e.livreurNom,
+      'Activité': e.activite, 'Quantité': lvQty(e), 'Montant (DA)': total,
+      'Statut': e.statut==='paye' ? 'Payé' : (e.statut==='partiel' ? 'Payé partiellement' : 'Impayé'),
+      'Montant payé (DA)': paid, 'Reste à payer (DA)': Math.max(total-paid, 0),
+      'Remarque': e.remarque || '', 'Créé par': e.createdByName || ''
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:12},{wch:12},{wch:20},{wch:26},{wch:26},{wch:10},{wch:14},{wch:18},{wch:16},{wch:16},{wch:30},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Factures livreurs');
+  const f = lvCurrentFilters();
+  const suffix = (f.month ? '-'+f.month : '') + (f.wilaya ? '-wilaya'+f.wilaya : '') + (f.livreur ? '-'+f.livreur.replace(/[^a-zA-Z0-9]+/g,'_') : '') + (f.statut ? '-'+f.statut : '');
+  XLSX.writeFile(wb, 'factures-livreurs' + suffix + '.xlsx');
+};
+
 // ---------------- nav ----------------
 function switchView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique', client:'client', analyse:'analyse'};
+  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique', client:'client', analyse:'analyse', livreur:'livreur', livreurForm:'livreur', livreurGroup:'livreur', livreurSheet:'livreur'};
   const btn = document.querySelector(`.tab-btn[data-view="${map[name]}"]`);
   if(btn) btn.classList.add('active');
-  document.querySelector('main').classList.toggle('wide', name==='historique' || name==='client' || name==='analyse');
+  document.querySelector('main').classList.toggle('wide', name==='historique' || name==='client' || name==='analyse' || name==='livreur');
   if(name==='historique') renderHistorique();
   if(name==='client') renderFicheClientTab();
   if(name==='analyse') renderAnalyse();
+  if(name==='livreur') renderLivreurTab();
 }
 document.querySelectorAll('.tab-btn').forEach(b=>{
   b.addEventListener('click', ()=>switchView(b.dataset.view));
