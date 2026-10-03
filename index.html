@@ -235,18 +235,6 @@
   .print-measure .fs-letters{ margin-top:12px; }
   .print-measure .fs-sign{ margin-top:26px; }
   .print-measure .fs-foot{ margin-top:22px; padding-top:8px; font-size:8.7px; line-height:1.5; }
-
-  /* Rendu hors écran pour la génération directe du PDF : mêmes tailles que l'impression,
-     page de 190mm x 281mm (A4 moins marges 10mm / 8mm) avec pied de page collé en bas. */
-  .print-measure.pdf-render .fs-page{ min-height:281mm; display:flex; flex-direction:column; background:#fff; border:none; border-radius:0; box-sizing:border-box; }
-  .print-measure.pdf-render .fs-foot{ margin-top:auto; }
-  .print-measure.pdf-render .fs-page-tight .fs-head{ padding-bottom:5px; margin-bottom:5px; }
-  .print-measure.pdf-render .fs-page-tight .fs-title{ margin:1px 0 6px; }
-  .print-measure.pdf-render .fs-page-tight .fs-meta{ margin-bottom:6px; }
-  .print-measure.pdf-render .fs-page-tight .fs-totals{ margin-top:5px; }
-  .print-measure.pdf-render .fs-page-tight .fs-letters{ margin-top:6px; }
-  .print-measure.pdf-render .fs-page-tight .fs-sign{ margin-top:10px; }
-  .print-measure.pdf-render .fs-page-tight .fs-foot{ padding-top:5px; }
 </style>
 </head>
 <body>
@@ -422,10 +410,7 @@
   <div class="view" id="view-sheet">
     <div class="actions-bar no-print" style="justify-content:space-between; margin-bottom:16px;">
       <button class="btn btn-ghost" id="backFromSheetBtn">← Retour</button>
-      <div style="display:flex; gap:10px; flex-wrap:wrap;">
-        <button class="btn btn-primary" id="pdfBtn">⬇ Télécharger le PDF</button>
-        <button class="btn btn-ghost" id="printBtn">🖨 Imprimer</button>
-      </div>
+      <button class="btn btn-primary" id="printBtn">🖨 Imprimer / Exporter en PDF</button>
     </div>
     <div id="factureSheet"></div>
   </div>
@@ -1771,68 +1756,6 @@ function factureSheetHTML(rec){
 function renderFactureSheet(rec){
   document.getElementById('factureSheet').innerHTML = factureSheetHTML(rec);
 }
-
-// ---------------- Export PDF direct (sans fenêtre d'impression) ----------------
-async function loadScriptFallback(globalName, sources){
-  if(window[globalName]) return true;
-  for(const src of sources){
-    try{ await anLoadScript(src); if(window[globalName]) return true; }catch(e){ console.warn(e.message); }
-  }
-  return false;
-}
-async function downloadFacturePdf(){
-  const rec = currentFacture;
-  if(!rec){ toast('Aucune facture à exporter.'); return; }
-  const btn = document.getElementById('pdfBtn');
-  const label = btn.textContent;
-  btn.disabled = true; btn.textContent = 'Génération du PDF...';
-  let container = null;
-  try{
-    const okCanvas = await loadScriptFallback('html2canvas', [
-      'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js',
-      'https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js'
-    ]);
-    const okPdf = await loadScriptFallback('jspdf', [
-      'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js',
-      'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js'
-    ]);
-    if(!okCanvas || !okPdf){ toast('Impossible de charger les bibliothèques PDF. Vérifiez la connexion internet.'); return; }
-
-    if(document.fonts && document.fonts.ready) await document.fonts.ready;
-
-    // Rendu hors écran avec exactement les tailles d'impression
-    container = document.createElement('div');
-    container.className = 'print-measure pdf-render';
-    document.body.appendChild(container);
-    container.innerHTML = factureSheetHTML(rec);
-    const pages = Array.from(container.querySelectorAll('.fs-page'));
-
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({ orientation:'portrait', unit:'mm', format:'a4', compress:true });
-    for(let i=0; i<pages.length; i++){
-      const canvas = await html2canvas(pages[i], {
-        scale: 2.5, backgroundColor:'#ffffff', useCORS:true, logging:false,
-        onclone: (doc)=>{ const c = doc.querySelector('.pdf-render'); if(c){ c.style.left='0'; c.style.top='0'; } }
-      });
-      const imgW = 190;
-      let imgH = canvas.height * imgW / canvas.width;
-      let w = imgW;
-      if(imgH > 281){ w = imgW * 281 / imgH; imgH = 281; }
-      if(i>0) pdf.addPage();
-      pdf.addImage(canvas.toDataURL('image/jpeg', 0.95), 'JPEG', 10, 8, w, imgH, undefined, 'FAST');
-    }
-    const safe = (t)=>String(t||'').replace(/[^a-zA-Z0-9]+/g,'_').replace(/^_+|_+$/g,'');
-    pdf.save(`${safe(rec.numero)}_${safe(rec.raison)}.pdf`);
-    toast('PDF téléchargé');
-  }catch(e){
-    console.error(e);
-    toast('Erreur lors de la génération du PDF.');
-  }finally{
-    if(container && container.parentNode) container.parentNode.removeChild(container);
-    btn.disabled = false; btn.textContent = label;
-  }
-}
-document.getElementById('pdfBtn').onclick = downloadFacturePdf;
 
 document.getElementById('backFromSheetBtn').onclick = ()=>switchView('facture');
 document.getElementById('printBtn').onclick = ()=>window.print();
