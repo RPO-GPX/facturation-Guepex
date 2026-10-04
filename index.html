@@ -513,6 +513,7 @@
         <div class="field"><label>Adresse</label><input id="lv_adresse"></div>
         <div class="field"><label>NIF</label><input id="lv_nif"></div>
         <div class="field"><label>N° d'immatriculation</label><input id="lv_immat"></div>
+        <div class="field"><label>N° AI</label><input id="lv_ai"></div>
       </div>
     </div>
 
@@ -564,7 +565,7 @@
       <p class="section-sub">Si le livreur est déjà enregistré dans cette wilaya, ses informations sont pré-remplies. Les nouveaux livreurs sont mémorisés.</p>
       <div style="overflow:auto; border:1px solid var(--line); border-radius:8px;">
         <table>
-          <thead><tr><th>Livreur</th><th>Activité</th><th>Adresse</th><th>NIF</th><th>N° d'immatriculation</th><th class="num">Quantité</th><th class="num">Prix unitaire</th><th class="num">Montant</th><th></th></tr></thead>
+          <thead><tr><th>Livreur</th><th>Activité</th><th>Adresse</th><th>NIF</th><th>N° d'immatriculation</th><th>N° AI</th><th class="num">Quantité</th><th class="num">Prix unitaire</th><th class="num">Montant</th><th></th></tr></thead>
           <tbody id="lgRowsBody"></tbody>
         </table>
       </div>
@@ -2274,7 +2275,7 @@ async function upsertLivreur(p){
   try{
     const { data, error } = await sb.from('livreurs').upsert({
       nom_norm: norm(p.nom), nom: p.nom, wilaya_code: p.wilayaCode, wilaya: p.wilaya,
-      activite: p.activite, adresse: p.adresse, nif: p.nif, immatriculation: p.immatriculation,
+      activite: p.activite, adresse: p.adresse, nif: p.nif, immatriculation: p.immatriculation, ai: p.ai,
       prix_unitaire: p.prixUnitaire, updated_at: new Date().toISOString()
     }, { onConflict:'nom_norm,wilaya_code' }).select().single();
     if(error){ console.error(error); return null; }
@@ -2300,7 +2301,7 @@ function lvRecFromDb(r){
   return {
     key:r.key, numero:r.numero, date:r.date, livreurId:r.livreur_id, livreurNom:r.livreur_nom,
     wilayaCode:r.wilaya_code, wilaya:r.wilaya, activite:r.activite||'', adresse:r.adresse||'',
-    nif:r.nif||'', immatriculation:r.immatriculation||'', rows:r.rows||[], totals:r.totals||{},
+    nif:r.nif||'', immatriculation:r.immatriculation||'', ai:r.ai||'', rows:r.rows||[], totals:r.totals||{},
     statut:r.statut||'non_paye', montantPartiel:r.montant_partiel||0, remarque:r.remarque||'',
     createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||''
   };
@@ -2336,7 +2337,7 @@ async function openLivreurForm(){
     sel.innerHTML = '<option value="">— Choisir la wilaya —</option>' + WILAYAS.map(([c,n])=>`<option value="${c}">${c} – ${lvEsc(n)}</option>`).join('');
   }
   sel.value = '';
-  ['lv_nom','lv_adresse','lv_nif','lv_immat'].forEach(id=>document.getElementById(id).value = '');
+  ['lv_nom','lv_adresse','lv_nif','lv_immat','lv_ai'].forEach(id=>document.getElementById(id).value = '');
   document.getElementById('lv_activite').value = LV_DEFAULT_ACTIVITE;
   document.getElementById('lv_date').value = todayISO();
   lvCurrentLivreur = null;
@@ -2372,6 +2373,7 @@ function lvOnIdentityChange(){
     document.getElementById('lv_adresse').value = found.adresse || '';
     document.getElementById('lv_nif').value = found.nif || '';
     document.getElementById('lv_immat').value = found.immatriculation || '';
+    document.getElementById('lv_ai').value = found.ai || '';
     if(found.prix_unitaire){
       lvRows.forEach(r=>{ if(r.description==='Livraison colis') r.pu = parseFloat(found.prix_unitaire)||r.pu; });
       lvRenderRows();
@@ -2424,7 +2426,7 @@ document.getElementById('lvNewBtn').onclick = openLivreurForm;
 async function lvCreateInvoice(d){
   const profile = {
     nom:d.nom, wilayaCode:d.wilayaCode, wilaya:lvWilayaName(d.wilayaCode),
-    activite:d.activite, adresse:d.adresse, nif:d.nif, immatriculation:d.immatriculation, prixUnitaire:d.rows[0].pu
+    activite:d.activite, adresse:d.adresse, nif:d.nif, immatriculation:d.immatriculation, ai:d.ai, prixUnitaire:d.rows[0].pu
   };
   const livreur = await upsertLivreur(profile);
   if(!livreur) return { error:"Erreur d'enregistrement du livreur." };
@@ -2437,13 +2439,13 @@ async function lvCreateInvoice(d){
   const record = {
     key, numero, date:d.dateVal, livreurId:livreur.id, livreurNom:d.nom,
     wilayaCode:d.wilayaCode, wilaya:profile.wilaya, activite:d.activite, adresse:d.adresse,
-    nif:d.nif, immatriculation:d.immatriculation,
+    nif:d.nif, immatriculation:d.immatriculation, ai:d.ai,
     rows:d.rows, totals:{ payer:total }, createdByName:currentDisplayName
   };
   const { error } = await sb.from('factures_livreur').insert({
     key, numero, date:d.dateVal, livreur_id:livreur.id, livreur_nom:d.nom,
     wilaya_code:d.wilayaCode, wilaya:profile.wilaya, activite:d.activite, adresse:d.adresse,
-    nif:d.nif, immatriculation:d.immatriculation,
+    nif:d.nif, immatriculation:d.immatriculation, ai:d.ai,
     rows:d.rows, totals:record.totals, created_by_name:currentDisplayName || null
   });
   if(error){
@@ -2472,7 +2474,8 @@ document.getElementById('lvGenerateBtn').onclick = async ()=>{
       activite: document.getElementById('lv_activite').value.trim(),
       adresse: document.getElementById('lv_adresse').value.trim(),
       nif: document.getElementById('lv_nif').value.trim(),
-      immatriculation: document.getElementById('lv_immat').value.trim()
+      immatriculation: document.getElementById('lv_immat').value.trim(),
+      ai: document.getElementById('lv_ai').value.trim()
     });
     if(res.error){ toast(res.error); return; }
     document.getElementById('lv_numero').value = res.record.numero;
@@ -2488,7 +2491,7 @@ document.getElementById('lvGenerateBtn').onclick = async ()=>{
 
 // ---------- facturation groupée par wilaya ----------
 let lgRows = [];
-function lgNewRow(){ return { nom:'', activite:LV_DEFAULT_ACTIVITE, adresse:'', nif:'', immat:'', qte:0, pu:LV_DEFAULT_PU, matchId:null }; }
+function lgNewRow(){ return { nom:'', activite:LV_DEFAULT_ACTIVITE, adresse:'', nif:'', immat:'', ai:'', qte:0, pu:LV_DEFAULT_PU, matchId:null }; }
 async function openLivreurGroupForm(){
   await fetchLivreurs();
   const sel = document.getElementById('lg_wilaya');
@@ -2514,6 +2517,7 @@ function lgRenderRows(){
       <td><input id="lg-adresse-${i}" type="text" value="${lvEsc(r.adresse)}" oninput="lgUpdateRow(${i},'adresse',this.value)" style="width:200px; ${inp}"></td>
       <td><input id="lg-nif-${i}" type="text" value="${lvEsc(r.nif)}" oninput="lgUpdateRow(${i},'nif',this.value)" style="width:150px; ${inp}"></td>
       <td><input id="lg-immat-${i}" type="text" value="${lvEsc(r.immat)}" oninput="lgUpdateRow(${i},'immat',this.value)" style="width:150px; ${inp}"></td>
+      <td><input id="lg-ai-${i}" type="text" value="${lvEsc(r.ai)}" oninput="lgUpdateRow(${i},'ai',this.value)" style="width:130px; ${inp}"></td>
       <td class="num"><input id="lg-qte-${i}" type="number" min="0" step="1" value="${r.qte||0}" oninput="lgUpdateRow(${i},'qte',this.value)" style="width:80px; text-align:right; ${inp}"></td>
       <td class="num"><input id="lg-pu-${i}" type="number" min="0" step="0.01" value="${r.pu||0}" oninput="lgUpdateRow(${i},'pu',this.value)" style="width:90px; text-align:right; ${inp}"></td>
       <td class="num" id="lg-montant-${i}">${fmtNum(lgMontant(r))}</td>
@@ -2532,9 +2536,9 @@ function lgUpdateRow(i, field, value){
       r.matchId = found ? found.id : null;
       if(found){
         r.activite = found.activite || LV_DEFAULT_ACTIVITE; r.adresse = found.adresse || '';
-        r.nif = found.nif || ''; r.immat = found.immatriculation || '';
+        r.nif = found.nif || ''; r.immat = found.immatriculation || ''; r.ai = found.ai || '';
         if(found.prix_unitaire) r.pu = parseFloat(found.prix_unitaire) || r.pu;
-        [['activite',r.activite],['adresse',r.adresse],['nif',r.nif],['immat',r.immat],['pu',r.pu]].forEach(([f,v])=>{ const el = document.getElementById(`lg-${f}-${i}`); if(el) el.value = v; });
+        [['activite',r.activite],['adresse',r.adresse],['nif',r.nif],['immat',r.immat],['ai',r.ai],['pu',r.pu]].forEach(([f,v])=>{ const el = document.getElementById(`lg-${f}-${i}`); if(el) el.value = v; });
       }
     }
   }
@@ -2561,7 +2565,7 @@ document.getElementById('lgGenerateBtn').onclick = async ()=>{
   const dateVal = document.getElementById('lg_date').value;
   if(!wilayaCode){ toast('Choisissez la wilaya.'); return; }
   if(!dateVal){ toast('La date est requise.'); return; }
-  const filled = lgRows.filter(r=>r.nom.trim() || r.qte || r.adresse.trim() || r.nif.trim() || r.immat.trim());
+  const filled = lgRows.filter(r=>r.nom.trim() || r.qte || r.adresse.trim() || r.nif.trim() || r.immat.trim() || r.ai.trim());
   if(!filled.length){ toast('Ajoutez au moins un livreur.'); return; }
   for(const r of filled){
     if(!r.nom.trim()){ toast('Un livreur n\'a pas de nom.'); return; }
@@ -2579,7 +2583,7 @@ document.getElementById('lgGenerateBtn').onclick = async ()=>{
       btn.textContent = `Enregistrement ${k+1}/${filled.length}...`;
       const res = await lvCreateInvoice({
         nom:r.nom.trim(), wilayaCode, dateVal,
-        activite:r.activite.trim(), adresse:r.adresse.trim(), nif:r.nif.trim(), immatriculation:r.immat.trim(),
+        activite:r.activite.trim(), adresse:r.adresse.trim(), nif:r.nif.trim(), immatriculation:r.immat.trim(), ai:r.ai.trim(),
         rows:[{ description:'Livraison colis', qte:r.qte, pu:r.pu, montant:lgMontant(r) }]
       });
       if(res.error){ toast(`« ${r.nom.trim()} » : ${res.error}` + (records.length ? ` (${records.length} facture(s) déjà enregistrée(s), consultez l'onglet Livreur)` : '')); break; }
@@ -2628,6 +2632,7 @@ function livreurSheetHTML(rec){
       <tr><td class="k">Adresse :</td><td class="v">${lvEsc(rec.adresse)}</td><td class="side">Facture N° ${lvEsc(rec.numero)}</td></tr>
       <tr><td class="k">NIF :</td><td class="v">${lvEsc(rec.nif)}</td><td class="side"></td></tr>
       <tr><td class="k">N° D'immatriculation :</td><td class="v">${lvEsc(rec.immatriculation)}</td><td class="side"></td></tr>
+      <tr><td class="k">N° AI :</td><td class="v">${lvEsc(rec.ai)}</td><td class="side"></td></tr>
     </table>
     <div class="lv-bar">Facturer à :</div>
     <div class="lv-client">
