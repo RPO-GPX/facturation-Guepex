@@ -264,6 +264,13 @@
     .lv-page{border:none !important; border-radius:0 !important; box-shadow:none !important; max-width:none !important; margin:0 !important; padding:0 !important; page-break-after:always; break-after:page;}
     .lv-page:last-child{page-break-after:auto; break-after:auto;}
   }
+  .lv-badge{display:inline-block; font-size:10.5px; font-weight:700; padding:2px 7px; border-radius:999px; background:#EDF0F6; color:var(--slate); margin-left:6px; vertical-align:middle; cursor:default;}
+  .lv-badge.red{background:var(--red-bg, #FDECEC); color:var(--red);}
+  .lv-badge.ok{background:var(--ok-bg); color:var(--ok);}
+  .lv-cancel{border:2px solid #C81E2C; color:#C81E2C; text-align:center; font-weight:700; font-size:15px; padding:7px 10px; margin:-8px 0 16px; letter-spacing:.04em;}
+  tr.lv-cancelled td{opacity:.55;}
+  tr.lv-cancelled td:last-child{opacity:1;}
+  tr.lv-cancelled .lv-strike{text-decoration:line-through;}
 </style>
 </head>
 <body>
@@ -460,6 +467,7 @@
           <select id="lvWilayaFilter" class="lv-sel"><option value="">Toutes les wilayas</option></select>
           <select id="lvMonthFilter" class="lv-sel"><option value="">Tous les mois</option></select>
           <button class="btn btn-ghost btn-sm" id="lvExportBtn">⬇ Exporter en Excel</button>
+          <button class="btn btn-ghost btn-sm" id="lvDirBtn">👥 Annuaire des livreurs</button>
           <button class="btn btn-ghost btn-sm" id="lvPrintAllBtn" title="Imprime toutes les factures affichées avec les filtres actuels, une page par facture">🖨 Imprimer les factures filtrées</button>
           <button class="btn btn-ghost btn-sm" id="lvGroupBtn">+ Facturation groupée</button>
           <button class="btn btn-primary btn-sm" id="lvNewBtn">+ Nouvelle facture livreur</button>
@@ -499,15 +507,15 @@
 
     <div class="card">
       <h2 class="section-title">Livreur (auto-entrepreneur)</h2>
-      <p class="section-sub">Choisissez la wilaya puis saisissez le nom : si le livreur est déjà enregistré, ses informations sont pré-remplies. Modifiable et mémorisé pour la prochaine fois.</p>
+      <p class="section-sub">Choisissez la wilaya puis le livreur dans la liste : ses informations s'affichent automatiquement. Un nouveau livreur ou une information à corriger se gère d'abord dans l'<a href="#" onclick="switchView('livreurDir'); return false;" style="color:var(--red); font-weight:700;">annuaire des livreurs</a>.</p>
       <div class="grid">
         <div class="field"><label>Wilaya</label><select id="lv_wilaya"></select><div id="lv_wilaya_hint" style="font-size:11px; color:var(--red); margin-top:5px; font-weight:600;"></div></div>
-        <div class="field"><label>Nom du livreur</label><input id="lv_nom" list="lvNomList" autocomplete="off"><datalist id="lvNomList"></datalist></div>
-        <div class="field"><label>Activité</label><input id="lv_activite"></div>
-        <div class="field"><label>Adresse</label><input id="lv_adresse"></div>
-        <div class="field"><label>NIF</label><input id="lv_nif"></div>
-        <div class="field"><label>N° d'immatriculation</label><input id="lv_immat"></div>
-        <div class="field"><label>N° AI</label><input id="lv_ai"></div>
+        <div class="field"><label>Livreur</label><select id="lv_nom"></select><div id="lv_nom_hint" style="font-size:11.5px; margin-top:5px;"></div></div>
+        <div class="field"><label>Activité</label><input id="lv_activite" readonly style="background:#F4F5F7; color:var(--slate); cursor:not-allowed;"></div>
+        <div class="field"><label>Adresse</label><input id="lv_adresse" readonly style="background:#F4F5F7; color:var(--slate); cursor:not-allowed;"></div>
+        <div class="field"><label>NIF</label><input id="lv_nif" readonly style="background:#F4F5F7; color:var(--slate); cursor:not-allowed;"></div>
+        <div class="field"><label>N° d'immatriculation</label><input id="lv_immat" readonly style="background:#F4F5F7; color:var(--slate); cursor:not-allowed;"></div>
+        <div class="field"><label>N° AI</label><input id="lv_ai" readonly style="background:#F4F5F7; color:var(--slate); cursor:not-allowed;"></div>
       </div>
     </div>
 
@@ -556,15 +564,14 @@
     </div>
     <div class="card">
       <h2 class="section-title">Livreurs</h2>
-      <p class="section-sub">Si le livreur est déjà enregistré dans cette wilaya, ses informations sont pré-remplies. Les nouveaux livreurs sont mémorisés.</p>
+      <p class="section-sub">Sélectionnez chaque livreur dans la liste : un livreur déjà sélectionné n'apparaît plus sur les autres lignes. Un nouveau livreur se crée d'abord dans l'<a href="#" onclick="switchView('livreurDir'); return false;" style="color:var(--red); font-weight:700;">annuaire des livreurs</a>.</p>
       <div style="overflow:auto; border:1px solid var(--line); border-radius:8px;">
         <table>
           <thead><tr><th>Livreur</th><th>Activité</th><th>Adresse</th><th>NIF</th><th>N° d'immatriculation</th><th>N° AI</th><th class="num">Quantité</th><th class="num">Prix unitaire</th><th class="num">Montant</th><th></th></tr></thead>
           <tbody id="lgRowsBody"></tbody>
         </table>
       </div>
-      <div id="lgNomLists"></div>
-      <div class="actions-bar no-print" style="justify-content:flex-start; margin-top:10px;">
+            <div class="actions-bar no-print" style="justify-content:flex-start; margin-top:10px;">
         <button class="btn btn-ghost btn-sm" id="lgAddBtn">+ Ajouter un livreur</button>
       </div>
       <div class="totals">
@@ -575,6 +582,49 @@
     <div class="actions-bar">
       <button class="btn btn-ghost" id="lgCancelBtn">← Annuler</button>
       <button class="btn btn-primary" id="lgGenerateBtn">Enregistrer &amp; générer les factures</button>
+    </div>
+  </div>
+
+  <!-- ================= LIVREUR : ANNUAIRE ================= -->
+  <div class="view" id="view-livreurDir">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h2 class="section-title">Annuaire des livreurs</h2>
+          <p class="section-sub">Informations des livreurs, numérotation de leurs factures et activation. Les factures déjà créées conservent les informations d'origine.</p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="ldSearch" placeholder="🔍 Nom du livreur..." style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; width:190px;">
+          <select id="ldWilayaFilter" class="lv-sel"><option value="">Toutes les wilayas</option></select>
+          <select id="ldStatutFilter" class="lv-sel">
+            <option value="actif">Actifs</option>
+            <option value="inactif">Désactivés</option>
+            <option value="">Tous</option>
+          </select>
+          <button class="btn btn-ghost btn-sm" id="ldTemplateBtn" title="Télécharge le modèle Excel à remplir">⬇ Modèle Excel</button>
+          <button class="btn btn-ghost btn-sm" id="ldImportBtn">⬆ Importer un fichier Excel</button>
+          <input type="file" id="ldFileInput" accept=".xlsx,.xls" style="display:none;">
+          <button class="btn btn-primary btn-sm" id="ldAddBtn">+ Ajouter un livreur</button>
+          <button class="btn btn-ghost btn-sm" id="ldBackBtn">← Retour</button>
+        </div>
+      </div>
+      <div id="ldSummary" style="display:flex; gap:22px; flex-wrap:wrap; margin:14px 0 6px; font-size:13px;"></div>
+      <div style="overflow:auto;">
+        <table id="ldTable">
+          <thead><tr>
+            <th>Livreur</th><th>Wilaya</th><th>Activité</th><th>Adresse</th><th>NIF</th><th>N° d'immatriculation</th><th>N° AI</th><th class="num">Prix unitaire</th><th>Dernier N° facture</th><th>État</th><th></th>
+          </tr></thead>
+          <tbody id="ldBody"></tbody>
+        </table>
+      </div>
+      <div id="ldEmpty" class="empty" style="display:none;">
+        <div class="icon">📭</div><div>Aucun livreur ne correspond.</div>
+      </div>
+      <div id="ldPager" style="display:none; justify-content:space-between; align-items:center; margin-top:14px;">
+        <button class="btn btn-ghost btn-sm" id="ldPagerPrev">← Précédent</button>
+        <span id="ldPagerInfo" style="font-size:12.5px; color:var(--slate); font-weight:600;"></span>
+        <button class="btn btn-ghost btn-sm" id="ldPagerNext">Suivant →</button>
+      </div>
     </div>
   </div>
 
@@ -819,6 +869,18 @@
     <div style="display:flex; justify-content:flex-end; gap:10px;">
       <button class="btn btn-ghost" id="editFactureCancelBtn">Annuler</button>
       <button class="btn btn-primary" id="editFactureSaveBtn">Enregistrer</button>
+    </div>
+  </div>
+</div>
+
+<div id="lvModal" style="display:none; position:fixed; inset:0; background:rgba(24,27,32,.45); z-index:100; align-items:center; justify-content:center; padding:16px;">
+  <div id="lvModalBox" style="background:#fff; border-radius:14px; padding:24px 24px 20px; width:100%; max-width:560px; max-height:90vh; display:flex; flex-direction:column; box-shadow:0 20px 50px rgba(0,0,0,.2);">
+    <h2 class="section-title" id="lvModalTitle" style="margin-bottom:14px;"></h2>
+    <div id="lvModalBody" style="overflow:auto; flex:1; padding-right:4px;"></div>
+    <div id="lvModalError" style="color:var(--red); font-size:12.5px; font-weight:600; margin:10px 0 0; min-height:16px;"></div>
+    <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:12px;">
+      <button class="btn btn-ghost" id="lvModalCancel">Annuler</button>
+      <button class="btn btn-primary" id="lvModalOk">Enregistrer</button>
     </div>
   </div>
 </div>
@@ -2265,17 +2327,6 @@ async function fetchLivreurs(){
   }catch(e){ console.error(e); livreursCache = []; }
   return livreursCache;
 }
-async function upsertLivreur(p){
-  try{
-    const { data, error } = await sb.from('livreurs').upsert({
-      nom_norm: norm(p.nom), nom: p.nom, wilaya_code: p.wilayaCode, wilaya: p.wilaya,
-      activite: p.activite, adresse: p.adresse, nif: p.nif, immatriculation: p.immatriculation, ai: p.ai,
-      prix_unitaire: p.prixUnitaire, updated_at: new Date().toISOString()
-    }, { onConflict:'nom_norm,wilaya_code' }).select().single();
-    if(error){ console.error(error); return null; }
-    return data;
-  }catch(e){ console.error(e); return null; }
-}
 async function reserveLivreurNumber(livreurId, year){
   try{
     const { data, error } = await sb.rpc('next_livreur_number', { p_livreur: livreurId, p_annee: year });
@@ -2297,7 +2348,9 @@ function lvRecFromDb(r){
     wilayaCode:r.wilaya_code, wilaya:r.wilaya, activite:r.activite||'', adresse:r.adresse||'',
     nif:r.nif||'', immatriculation:r.immatriculation||'', ai:r.ai||'', rows:r.rows||[], totals:r.totals||{},
     statut:r.statut||'non_paye', montantPartiel:r.montant_partiel||0, remarque:r.remarque||'',
-    createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||''
+    createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||'',
+    annulee:!!r.annulee, annuleeLe:r.annulee_le||'', annuleePar:r.annulee_par||'', motifAnnulation:r.motif_annulation||'',
+    modifieeLe:r.modifiee_le||'', modifieePar:r.modifiee_par||'', historique:Array.isArray(r.historique)?r.historique:[]
   };
 }
 async function fetchFacturesLivreur(){
@@ -2331,21 +2384,40 @@ async function openLivreurForm(){
     sel.innerHTML = '<option value="">— Choisir la wilaya —</option>' + WILAYAS.map(([c,n])=>`<option value="${c}">${c} – ${lvEsc(n)}</option>`).join('');
   }
   sel.value = '';
-  ['lv_nom','lv_adresse','lv_nif','lv_immat','lv_ai'].forEach(id=>document.getElementById(id).value = '');
-  document.getElementById('lv_activite').value = LV_DEFAULT_ACTIVITE;
   document.getElementById('lv_date').value = todayISO();
   lvCurrentLivreur = null;
   lvRows = [{ description:'Livraison colis', qte:0, pu:LV_DEFAULT_PU }];
-  lvUpdateWilayaLock();
   lvRefreshNomList();
+  lvFillInfo();
+  lvUpdateWilayaLock();
   lvRenderRows();
   lvRefreshNumeroPreview();
   switchView('livreurForm');
 }
+// Liste déroulante : uniquement les livreurs actifs de la wilaya choisie
 function lvRefreshNomList(){
   const code = document.getElementById('lv_wilaya').value;
-  const list = livreursCache.filter(l=>!code || l.wilaya_code===code);
-  document.getElementById('lvNomList').innerHTML = list.map(l=>`<option value="${lvEsc(l.nom)}"></option>`).join('');
+  const nomSel = document.getElementById('lv_nom'), hint = document.getElementById('lv_nom_hint');
+  const cur = lvCurrentLivreur ? lvCurrentLivreur.id : '';
+  if(!code){
+    nomSel.innerHTML = '<option value="">— Choisissez d\'abord la wilaya —</option>'; nomSel.disabled = true; hint.innerHTML = ''; return;
+  }
+  const list = livreursCache.filter(l=>l.actif!==false && l.wilaya_code===code).sort((a,b)=>a.nom.localeCompare(b.nom,'fr'));
+  if(!list.length){
+    nomSel.innerHTML = '<option value="">Aucun livreur dans cette wilaya</option>'; nomSel.disabled = true;
+    hint.innerHTML = `<span style="color:var(--red); font-weight:600;">Aucun livreur dans cette wilaya : créez-le d'abord dans l'annuaire.</span> <button class="btn btn-ghost btn-sm" onclick="switchView('livreurDir')">👥 Ouvrir l'annuaire</button>`;
+    return;
+  }
+  nomSel.disabled = false; hint.innerHTML = '';
+  nomSel.innerHTML = '<option value="">— Choisir le livreur —</option>' + list.map(l=>`<option value="${l.id}" ${l.id===cur?'selected':''}>${lvEsc(l.nom)}</option>`).join('');
+}
+function lvFillInfo(){
+  const l = lvCurrentLivreur;
+  document.getElementById('lv_activite').value = l ? (l.activite || '') : '';
+  document.getElementById('lv_adresse').value = l ? (l.adresse || '') : '';
+  document.getElementById('lv_nif').value = l ? (l.nif || '') : '';
+  document.getElementById('lv_immat').value = l ? (l.immatriculation || '') : '';
+  document.getElementById('lv_ai').value = l ? (l.ai || '') : '';
 }
 async function lvRefreshNumeroPreview(){
   const dateVal = document.getElementById('lv_date').value || todayISO();
@@ -2353,39 +2425,30 @@ async function lvRefreshNumeroPreview(){
   const next = await previewLivreurNumber(lvCurrentLivreur ? lvCurrentLivreur.id : null, year);
   document.getElementById('lv_numero').value = lvFormatNumero(next, year);
 }
-function lvMatchLivreur(){
-  const code = document.getElementById('lv_wilaya').value;
-  const nom = document.getElementById('lv_nom').value.trim();
-  if(!code || !nom) return null;
-  return livreursCache.find(l=>l.wilaya_code===code && l.nom_norm===norm(nom)) || null;
-}
-// La wilaya est verrouillée dès qu'un livreur est saisi/sélectionné : on ne mélange pas les wilayas
+// La wilaya est verrouillée dès qu'un livreur est sélectionné : on ne mélange pas les wilayas
 function lvUpdateWilayaLock(){
   const sel = document.getElementById('lv_wilaya');
-  const locked = !!sel.value && !!document.getElementById('lv_nom').value.trim();
+  const locked = !!sel.value && !!lvCurrentLivreur;
   sel.disabled = locked;
-  document.getElementById('lv_wilaya_hint').textContent = locked ? '🔒 Wilaya verrouillée : effacez le nom du livreur pour la changer.' : '';
+  document.getElementById('lv_wilaya_hint').textContent = locked ? '🔒 Wilaya verrouillée : désélectionnez le livreur pour la changer.' : '';
 }
 function lvOnIdentityChange(){
-  lvUpdateWilayaLock();
-  const found = lvMatchLivreur();
+  const id = document.getElementById('lv_nom').value;
+  const found = id ? (livreursCache.find(l=>l.id===id) || null) : null;
   const changed = (found ? found.id : null) !== (lvCurrentLivreur ? lvCurrentLivreur.id : null);
   lvCurrentLivreur = found;
-  if(found && changed){
-    document.getElementById('lv_activite').value = found.activite || LV_DEFAULT_ACTIVITE;
-    document.getElementById('lv_adresse').value = found.adresse || '';
-    document.getElementById('lv_nif').value = found.nif || '';
-    document.getElementById('lv_immat').value = found.immatriculation || '';
-    document.getElementById('lv_ai').value = found.ai || '';
-    if(found.prix_unitaire){
-      lvRows.forEach(r=>{ if(r.description==='Livraison colis') r.pu = parseFloat(found.prix_unitaire)||r.pu; });
+  lvFillInfo();
+  lvUpdateWilayaLock();
+  if(changed){
+    if(found && found.prix_unitaire){
+      lvRows.forEach(r=>{ if(r.description==='Livraison colis') r.pu = parseFloat(found.prix_unitaire) || r.pu; });
       lvRenderRows();
     }
+    lvRefreshNumeroPreview();
   }
-  if(changed) lvRefreshNumeroPreview();
 }
-document.getElementById('lv_wilaya').onchange = ()=>{ lvRefreshNomList(); lvOnIdentityChange(); };
-document.getElementById('lv_nom').oninput = lvOnIdentityChange;
+document.getElementById('lv_wilaya').onchange = ()=>{ lvCurrentLivreur = null; lvRefreshNomList(); lvOnIdentityChange(); };
+document.getElementById('lv_nom').onchange = lvOnIdentityChange;
 document.getElementById('lv_date').onchange = lvRefreshNumeroPreview;
 
 function lvRenderRows(){
@@ -2425,30 +2488,26 @@ function lvWords(n){
 document.getElementById('lvCancelBtn').onclick = ()=>switchView('livreur');
 document.getElementById('lvNewBtn').onclick = openLivreurForm;
 
-// Création d'une facture livreur (utilisée par la facture simple et par la facturation groupée)
+// Création d'une facture livreur (utilisée par la facture simple et par la facturation groupée).
+// Le livreur doit déjà exister dans l'annuaire : ses informations sont reprises telles quelles.
 async function lvCreateInvoice(d){
-  const profile = {
-    nom:d.nom, wilayaCode:d.wilayaCode, wilaya:lvWilayaName(d.wilayaCode),
-    activite:d.activite, adresse:d.adresse, nif:d.nif, immatriculation:d.immatriculation, ai:d.ai, prixUnitaire:d.rows[0].pu
-  };
-  const livreur = await upsertLivreur(profile);
-  if(!livreur) return { error:"Erreur d'enregistrement du livreur." };
+  const livreur = d.livreur;
+  if(!livreur) return { error:'Livreur introuvable.' };
   const year = parseInt(d.dateVal.slice(0,4));
   const n = await reserveLivreurNumber(livreur.id, year);
   if(n === null) return { error:'Erreur lors de la réservation du numéro de facture.' };
   const numero = lvFormatNumero(n, year);
   const key = 'LV_' + livreur.id.replace(/-/g,'').slice(0,8) + '_' + numero.replace(/[^a-zA-Z0-9]/g,'_');
   const total = Math.round(d.rows.reduce((s,r)=>s+r.montant, 0) * 100) / 100;
+  const info = { activite: livreur.activite||'', adresse: livreur.adresse||'', nif: livreur.nif||'', immatriculation: livreur.immatriculation||'', ai: livreur.ai||'' };
   const record = {
-    key, numero, date:d.dateVal, livreurId:livreur.id, livreurNom:d.nom,
-    wilayaCode:d.wilayaCode, wilaya:profile.wilaya, activite:d.activite, adresse:d.adresse,
-    nif:d.nif, immatriculation:d.immatriculation, ai:d.ai,
+    key, numero, date:d.dateVal, livreurId:livreur.id, livreurNom:livreur.nom,
+    wilayaCode:livreur.wilaya_code, wilaya:livreur.wilaya, ...info,
     rows:d.rows, totals:{ payer:total }, createdByName:currentDisplayName
   };
   const { error } = await sb.from('factures_livreur').insert({
-    key, numero, date:d.dateVal, livreur_id:livreur.id, livreur_nom:d.nom,
-    wilaya_code:d.wilayaCode, wilaya:profile.wilaya, activite:d.activite, adresse:d.adresse,
-    nif:d.nif, immatriculation:d.immatriculation, ai:d.ai,
+    key, numero, date:d.dateVal, livreur_id:livreur.id, livreur_nom:livreur.nom,
+    wilaya_code:livreur.wilaya_code, wilaya:livreur.wilaya, ...info,
     rows:d.rows, totals:record.totals, created_by_name:currentDisplayName || null
   });
   if(error){
@@ -2460,10 +2519,9 @@ async function lvCreateInvoice(d){
 
 document.getElementById('lvGenerateBtn').onclick = async ()=>{
   const wilayaCode = document.getElementById('lv_wilaya').value;
-  const nom = document.getElementById('lv_nom').value.trim();
   const dateVal = document.getElementById('lv_date').value;
   if(!wilayaCode){ toast('Choisissez la wilaya.'); return; }
-  if(!nom){ toast('Le nom du livreur est requis.'); return; }
+  if(!lvCurrentLivreur){ toast('Sélectionnez le livreur dans la liste.'); return; }
   if(!dateVal){ toast('La date est requise.'); return; }
   const rows = lvRows.filter(r=>(r.description||'').trim() || r.qte || r.pu).map(r=>({ description:(r.description||'').trim(), qte:r.qte||0, pu:r.pu||0, montant:lvRowMontant(r) }));
   const total = lvTotal();
@@ -2472,14 +2530,7 @@ document.getElementById('lvGenerateBtn').onclick = async ()=>{
   const btn = document.getElementById('lvGenerateBtn');
   btn.disabled = true; btn.textContent = 'Enregistrement...';
   try{
-    const res = await lvCreateInvoice({
-      nom, wilayaCode, dateVal, rows,
-      activite: document.getElementById('lv_activite').value.trim(),
-      adresse: document.getElementById('lv_adresse').value.trim(),
-      nif: document.getElementById('lv_nif').value.trim(),
-      immatriculation: document.getElementById('lv_immat').value.trim(),
-      ai: document.getElementById('lv_ai').value.trim()
-    });
+    const res = await lvCreateInvoice({ livreur: lvCurrentLivreur, dateVal, rows });
     if(res.error){ toast(res.error); return; }
     document.getElementById('lv_numero').value = res.record.numero;
     currentLivreurFacture = res.record;
@@ -2494,7 +2545,13 @@ document.getElementById('lvGenerateBtn').onclick = async ()=>{
 
 // ---------- facturation groupée par wilaya ----------
 let lgRows = [];
-function lgNewRow(){ return { nom:'', activite:LV_DEFAULT_ACTIVITE, adresse:'', nif:'', immat:'', ai:'', qte:0, pu:LV_DEFAULT_PU, matchId:null }; }
+function lgNewRow(){ return { id:'', qte:0, pu:LV_DEFAULT_PU }; }
+const lgFind = (id)=>livreursCache.find(l=>l.id===id) || null;
+function lgMontant(r){ return Math.round(((r.qte||0)*(r.pu||0))*100)/100; }
+function lgPool(){
+  const code = document.getElementById('lg_wilaya').value;
+  return code ? livreursCache.filter(l=>l.actif!==false && l.wilaya_code===code).sort((a,b)=>a.nom.localeCompare(b.nom,'fr')) : [];
+}
 async function openLivreurGroupForm(){
   await fetchLivreurs();
   const sel = document.getElementById('lg_wilaya');
@@ -2502,91 +2559,86 @@ async function openLivreurGroupForm(){
   sel.value = '';
   document.getElementById('lg_date').value = todayISO();
   lgRows = [lgNewRow(), lgNewRow()];
-  lgRefreshNomList();
   lgRenderRows();
   switchView('livreurGroup');
 }
-// La wilaya est verrouillée dès qu'un livreur est saisi : tous les livreurs d'un lot appartiennent à la même wilaya
-function lgUpdateWilayaLock(){
-  const sel = document.getElementById('lg_wilaya');
-  const locked = !!sel.value && lgRows.some(r=>r.nom.trim());
-  sel.disabled = locked;
-  document.getElementById('lg_wilaya_hint').textContent = locked ? '🔒 Wilaya verrouillée : effacez tous les livreurs de la liste pour la changer.' : '';
-}
-// Une liste de suggestions par ligne : les livreurs déjà choisis (sur n'importe quelle ligne) n'y figurent plus
-function lgRefreshNomList(){
-  lgUpdateWilayaLock();
-  const code = document.getElementById('lg_wilaya').value;
-  const pool = livreursCache.filter(l=>!code || l.wilaya_code===code);
-  const used = lgRows.map(r=>norm(r.nom));
-  document.getElementById('lgNomLists').innerHTML = lgRows.map((r,i)=>{
-    // exclut tout livreur déjà sélectionné, y compris sur cette même ligne (sinon son nom réapparaît après le choix)
-    const options = pool.filter(l=>!used.some(u=>u && u===l.nom_norm));
-    return `<datalist id="lgNomList-${i}">${options.map(l=>`<option value="${lvEsc(l.nom)}"></option>`).join('')}</datalist>`;
-  }).join('');
-  // signale visuellement un livreur saisi en double
-  lgRows.forEach((r,i)=>{
-    const el = document.getElementById('lg-nom-'+i); if(!el) return;
-    const dup = !!used[i] && used.some((u,j)=>j!==i && u===used[i]);
-    el.style.borderColor = dup ? 'var(--red)' : 'var(--line)';
-    el.title = dup ? 'Ce livreur est déjà sélectionné dans une autre ligne.' : '';
-  });
-}
-function lgMontant(r){ return Math.round(((r.qte||0)*(r.pu||0))*100)/100; }
 function lgRenderRows(){
   const inp = 'border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;';
+  const cell = 'font-size:12px; color:var(--slate);';
   document.getElementById('lgRowsBody').innerHTML = lgRows.map((r,i)=>`
     <tr>
-      <td><input id="lg-nom-${i}" list="lgNomList-${i}" autocomplete="off" type="text" value="${lvEsc(r.nom)}" oninput="lgUpdateRow(${i},'nom',this.value)" style="width:260px; ${inp}"></td>
-      <td><input id="lg-activite-${i}" type="text" value="${lvEsc(r.activite)}" oninput="lgUpdateRow(${i},'activite',this.value)" style="width:170px; ${inp}"></td>
-      <td><input id="lg-adresse-${i}" type="text" value="${lvEsc(r.adresse)}" oninput="lgUpdateRow(${i},'adresse',this.value)" style="width:200px; ${inp}"></td>
-      <td><input id="lg-nif-${i}" type="text" value="${lvEsc(r.nif)}" oninput="lgUpdateRow(${i},'nif',this.value)" style="width:150px; ${inp}"></td>
-      <td><input id="lg-immat-${i}" type="text" value="${lvEsc(r.immat)}" oninput="lgUpdateRow(${i},'immat',this.value)" style="width:150px; ${inp}"></td>
-      <td><input id="lg-ai-${i}" type="text" value="${lvEsc(r.ai)}" oninput="lgUpdateRow(${i},'ai',this.value)" style="width:130px; ${inp}"></td>
+      <td><select id="lg-sel-${i}" onchange="lgSelect(${i}, this.value)" style="width:270px; ${inp}"></select></td>
+      <td id="lg-activite-${i}" style="${cell}"></td>
+      <td id="lg-adresse-${i}" style="${cell} min-width:160px;"></td>
+      <td id="lg-nif-${i}" style="${cell}"></td>
+      <td id="lg-immat-${i}" style="${cell}"></td>
+      <td id="lg-ai-${i}" style="${cell}"></td>
       <td class="num"><input id="lg-qte-${i}" type="number" min="0" step="1" value="${r.qte||0}" oninput="lgUpdateRow(${i},'qte',this.value)" style="width:80px; text-align:right; ${inp}"></td>
       <td class="num"><input id="lg-pu-${i}" type="number" min="0" step="0.01" value="${r.pu||0}" oninput="lgUpdateRow(${i},'pu',this.value)" style="width:90px; text-align:right; ${inp}"></td>
       <td class="num" id="lg-montant-${i}">${fmtNum(lgMontant(r))}</td>
       <td>${lgRows.length>1 ? `<button class="rm-btn" onclick="lgRemoveRow(${i})" title="Retirer">✕</button>` : ''}</td>
     </tr>`).join('');
-  lgRefreshNomList();
+  lgRows.forEach((r,i)=>lgFillInfo(i));
+  lgRefreshSelects();
   lgUpdateTotals();
+  lgUpdateWilayaLock();
+}
+// Chaque liste exclut les livreurs déjà sélectionnés sur les autres lignes
+function lgRefreshSelects(){
+  const code = document.getElementById('lg_wilaya').value;
+  const pool = lgPool();
+  const used = lgRows.map(r=>r.id);
+  lgRows.forEach((r,i)=>{
+    const el = document.getElementById('lg-sel-'+i); if(!el) return;
+    if(!code){ el.innerHTML = '<option value="">— Choisissez d\'abord la wilaya —</option>'; el.disabled = true; return; }
+    if(!pool.length){ el.innerHTML = '<option value="">Aucun livreur dans cette wilaya</option>'; el.disabled = true; return; }
+    el.disabled = false;
+    const options = pool.filter(l=>l.id===r.id || !used.some((u,j)=>j!==i && u===l.id));
+    el.innerHTML = '<option value="">— Choisir le livreur —</option>' + options.map(l=>`<option value="${l.id}" ${l.id===r.id?'selected':''}>${lvEsc(l.nom)}</option>`).join('');
+  });
+}
+function lgFillInfo(i){
+  const l = lgFind(lgRows[i].id);
+  const set = (f, v)=>{ const el = document.getElementById(`lg-${f}-${i}`); if(el) el.textContent = v || ''; };
+  set('activite', l && l.activite); set('adresse', l && l.adresse); set('nif', l && l.nif); set('immat', l && l.immatriculation); set('ai', l && l.ai);
+}
+function lgSelect(i, id){
+  const r = lgRows[i]; if(!r) return;
+  r.id = id;
+  const l = lgFind(id);
+  if(l){
+    r.pu = l.prix_unitaire ? (parseFloat(l.prix_unitaire) || LV_DEFAULT_PU) : LV_DEFAULT_PU;
+    const puEl = document.getElementById('lg-pu-'+i); if(puEl) puEl.value = r.pu;
+    const c = document.getElementById('lg-montant-'+i); if(c) c.textContent = fmtNum(lgMontant(r));
+  }
+  lgFillInfo(i);
+  lgRefreshSelects();
+  lgUpdateTotals();
+  lgUpdateWilayaLock();
 }
 function lgUpdateRow(i, field, value){
   const r = lgRows[i]; if(!r) return;
-  if(field==='qte' || field==='pu') r[field] = parseFloat(value)||0;
-  else r[field] = value;
-  if(field==='nom'){
-    const code = document.getElementById('lg_wilaya').value;
-    const found = code && value.trim() ? livreursCache.find(l=>l.wilaya_code===code && l.nom_norm===norm(value)) : null;
-    if((found ? found.id : null) !== r.matchId){
-      r.matchId = found ? found.id : null;
-      if(found){
-        r.activite = found.activite || LV_DEFAULT_ACTIVITE; r.adresse = found.adresse || '';
-        r.nif = found.nif || ''; r.immat = found.immatriculation || ''; r.ai = found.ai || '';
-        if(found.prix_unitaire) r.pu = parseFloat(found.prix_unitaire) || r.pu;
-        [['activite',r.activite],['adresse',r.adresse],['nif',r.nif],['immat',r.immat],['ai',r.ai],['pu',r.pu]].forEach(([f,v])=>{ const el = document.getElementById(`lg-${f}-${i}`); if(el) el.value = v; });
-      }
-    }
-  }
-  if(field==='nom'){
-    lgRefreshNomList();
-    const me = norm(r.nom);
-    if(me && lgRows.some((o,j)=>j!==i && norm(o.nom)===me)) toast('Ce livreur est déjà sélectionné dans une autre ligne.');
-  }
+  r[field] = parseFloat(value)||0;
   const cell = document.getElementById('lg-montant-'+i);
   if(cell) cell.textContent = fmtNum(lgMontant(r));
   lgUpdateTotals();
 }
 function lgRemoveRow(i){ lgRows.splice(i,1); if(!lgRows.length) lgRows.push(lgNewRow()); lgRenderRows(); }
 function lgUpdateTotals(){
-  const active = lgRows.filter(r=>r.nom.trim() && r.qte>0);
+  const active = lgRows.filter(r=>r.id && r.qte>0);
   document.getElementById('lg_count').textContent = active.length;
   document.getElementById('lg_total').textContent = fmtNum(active.reduce((s,r)=>s+lgMontant(r),0));
 }
-document.getElementById('lg_wilaya').onchange = ()=>{
-  lgRefreshNomList();
-  lgRows.forEach((r,i)=>{ r.matchId = null; lgUpdateRow(i,'nom',r.nom); });
-};
+// La wilaya est verrouillée dès qu'un livreur est sélectionné : tous les livreurs d'un lot appartiennent à la même wilaya
+function lgUpdateWilayaLock(){
+  const sel = document.getElementById('lg_wilaya');
+  const locked = !!sel.value && lgRows.some(r=>r.id);
+  sel.disabled = locked;
+  document.getElementById('lg_wilaya_hint').textContent = locked
+    ? '🔒 Wilaya verrouillée : désélectionnez tous les livreurs de la liste pour la changer.'
+    : (sel.value && !lgPool().length ? "Aucun livreur dans cette wilaya : créez-les d'abord dans l'annuaire." : '');
+}
+document.getElementById('lg_wilaya').onchange = ()=>{ lgRows.forEach(r=>{ r.id = ''; }); lgRenderRows(); };
 document.getElementById('lgAddBtn').onclick = ()=>{ lgRows.push(lgNewRow()); lgRenderRows(); };
 document.getElementById('lgCancelBtn').onclick = ()=>switchView('livreur');
 document.getElementById('lvGroupBtn').onclick = openLivreurGroupForm;
@@ -2596,28 +2648,24 @@ document.getElementById('lgGenerateBtn').onclick = async ()=>{
   const dateVal = document.getElementById('lg_date').value;
   if(!wilayaCode){ toast('Choisissez la wilaya.'); return; }
   if(!dateVal){ toast('La date est requise.'); return; }
-  const filled = lgRows.filter(r=>r.nom.trim() || r.qte || r.adresse.trim() || r.nif.trim() || r.immat.trim() || r.ai.trim());
-  if(!filled.length){ toast('Ajoutez au moins un livreur.'); return; }
+  const filled = lgRows.filter(r=>r.id || r.qte);
+  if(!filled.length){ toast('Sélectionnez au moins un livreur.'); return; }
   for(const r of filled){
-    if(!r.nom.trim()){ toast('Un livreur n\'a pas de nom.'); return; }
-    if(!(r.qte>0) || !(r.pu>0)){ toast(`Quantité et prix requis pour « ${r.nom.trim()} ».`); return; }
+    if(!r.id){ toast('Sélectionnez le livreur de chaque ligne renseignée.'); return; }
+    const l = lgFind(r.id);
+    if(!(r.qte>0) || !(r.pu>0)){ toast(`Quantité et prix requis pour « ${l ? l.nom : 'livreur'} ».`); return; }
   }
-  const names = filled.map(r=>norm(r.nom));
-  if(new Set(names).size !== names.length){ toast('Un même livreur apparaît deux fois dans la liste.'); return; }
+  if(new Set(filled.map(r=>r.id)).size !== filled.length){ toast('Un même livreur apparaît deux fois dans la liste.'); return; }
 
   const btn = document.getElementById('lgGenerateBtn');
   btn.disabled = true;
   const records = [];
   try{
     for(let k=0; k<filled.length; k++){
-      const r = filled[k];
+      const r = filled[k], l = lgFind(r.id);
       btn.textContent = `Enregistrement ${k+1}/${filled.length}...`;
-      const res = await lvCreateInvoice({
-        nom:r.nom.trim(), wilayaCode, dateVal,
-        activite:r.activite.trim(), adresse:r.adresse.trim(), nif:r.nif.trim(), immatriculation:r.immat.trim(), ai:r.ai.trim(),
-        rows:[{ description:'Livraison colis', qte:r.qte, pu:r.pu, montant:lgMontant(r) }]
-      });
-      if(res.error){ toast(`« ${r.nom.trim()} » : ${res.error}` + (records.length ? ` (${records.length} facture(s) déjà enregistrée(s), consultez l'onglet Livreur)` : '')); break; }
+      const res = await lvCreateInvoice({ livreur:l, dateVal, rows:[{ description:'Livraison colis', qte:r.qte, pu:r.pu, montant:lgMontant(r) }] });
+      if(res.error){ toast(`« ${l.nom} » : ${res.error}` + (records.length ? ` (${records.length} facture(s) déjà enregistrée(s), consultez l'onglet Livreur)` : '')); break; }
       records.push(res.record);
     }
   } finally {
@@ -2632,12 +2680,14 @@ document.getElementById('lgGenerateBtn').onclick = async ()=>{
 
 // impression groupée des factures filtrées (une page par facture)
 document.getElementById('lvPrintAllBtn').onclick = async ()=>{
-  if(!lvFiltered.length){ toast('Aucune facture à imprimer.'); return; }
-  if(lvFiltered.length > 60){
-    const ok = await showConfirmModal(`Imprimer ${lvFiltered.length} factures en une seule fois ?`, 'Imprimer');
+  const printable = lvFiltered.filter(e=>!e.annulee);
+  if(!printable.length){ toast('Aucune facture valide à imprimer.'); return; }
+  if(printable.length > 60){
+    const ok = await showConfirmModal(`Imprimer ${printable.length} factures en une seule fois ?`, 'Imprimer');
     if(!ok) return;
   }
-  const sorted = [...lvFiltered].sort((a,b)=> a.wilayaCode.localeCompare(b.wilayaCode) || a.livreurNom.localeCompare(b.livreurNom,'fr') || a.numero.localeCompare(b.numero));
+  if(printable.length < lvFiltered.length) toast(`${lvFiltered.length - printable.length} facture(s) annulée(s) non imprimée(s).`);
+  const sorted = [...printable].sort((a,b)=> a.wilayaCode.localeCompare(b.wilayaCode) || a.livreurNom.localeCompare(b.livreurNom,'fr') || a.numero.localeCompare(b.numero));
   lvSheetBack = 'livreur';
   document.getElementById('livreurSheet').innerHTML = sorted.map(livreurSheetHTML).join('');
   switchView('livreurSheet');
@@ -2657,6 +2707,7 @@ function livreurSheetHTML(rec){
   }
   return `<div class="lv-page">
     <div class="lv-title">FACTURE</div>
+    ${rec.annulee ? `<div class="lv-cancel">FACTURE ANNULÉE${rec.motifAnnulation ? ' — ' + lvEsc(rec.motifAnnulation) : ''}</div>` : ''}
     <table class="lv-info">
       <tr><td class="k">AUTO - ENTREPRENEUR :</td><td class="v">${lvEsc(rec.livreurNom)}</td><td class="side"></td></tr>
       <tr><td class="k">Activité :</td><td class="v">${lvEsc(rec.activite)}</td><td class="side">Date : ${fmtDateDMY(rec.date)}</td></tr>
@@ -2736,9 +2787,10 @@ function lvRenderTable(){
   const table = document.getElementById('lvHistTable');
   const empty = document.getElementById('lvHistEmpty');
   const pager = document.getElementById('lvPager');
-  const totalFact = lvFiltered.reduce((s,e)=>s+((e.totals&&e.totals.payer)||0), 0);
+  const valides = lvFiltered.filter(e=>!e.annulee), nbAnnulees = lvFiltered.length - valides.length;
+  const totalFact = valides.reduce((s,e)=>s+((e.totals&&e.totals.payer)||0), 0);
   const stat = (label, val)=>`<div><span style="color:var(--slate); font-weight:600;">${label}</span> <b>${val}</b></div>`;
-  document.getElementById('lvSummary').innerHTML = stat('Factures', lvFiltered.length) + stat('Total facturé', fmtNum(totalFact)+' DA');
+  document.getElementById('lvSummary').innerHTML = stat('Factures', valides.length) + stat('Total facturé', fmtNum(totalFact)+' DA') + (nbAnnulees ? stat('Annulées (non comptées)', nbAnnulees) : '');
   if(!lvFiltered.length){
     body.innerHTML = ''; table.style.display = 'none'; empty.style.display = ''; pager.style.display = 'none';
     return;
@@ -2747,19 +2799,28 @@ function lvRenderTable(){
   const totalPages = Math.max(1, Math.ceil(lvFiltered.length/LV_PAGE_SIZE));
   if(lvPage > totalPages-1) lvPage = totalPages-1;
   const pageRows = lvFiltered.slice(lvPage*LV_PAGE_SIZE, (lvPage+1)*LV_PAGE_SIZE);
-  body.innerHTML = pageRows.map(e=>`<tr>
-      <td>${lvEsc(e.numero)}</td>
+  body.innerHTML = pageRows.map(e=>{
+    const last = e.historique && e.historique.length ? e.historique[e.historique.length-1] : null;
+    const modTip = e.modifieeLe ? `Corrigée le ${fmtDateDMY(String(e.modifieeLe).slice(0,10))}${e.modifieePar?' par '+e.modifieePar:''}${last&&last.action==='modification'&&last.motif?' — '+last.motif:''}` : '';
+    const annTip = e.annulee ? `Annulée le ${fmtDateDMY(String(e.annuleeLe).slice(0,10))}${e.annuleePar?' par '+e.annuleePar:''} — ${e.motifAnnulation||''}` : '';
+    return `<tr class="${e.annulee?'lv-cancelled':''}">
+      <td><span class="lv-strike">${lvEsc(e.numero)}</span>${e.annulee ? `<span class="lv-badge red" title="${lvEsc(annTip)}">ANNULÉE</span>` : ''}${(!e.annulee && e.modifieeLe) ? `<span class="lv-badge" title="${lvEsc(modTip)}">corrigée</span>` : ''}</td>
       <td>${fmtDateDMY(e.date)}</td>
       <td>${lvEsc(e.wilayaCode)} – ${lvEsc(e.wilaya)}</td>
       <td style="font-weight:600;">${lvEsc(e.livreurNom)}</td>
-      <td class="num">${lvQty(e)}</td>
-      <td class="num">${fmtNum((e.totals&&e.totals.payer)||0)} DA</td>
+      <td class="num"><span class="lv-strike">${lvQty(e)}</span></td>
+      <td class="num"><span class="lv-strike">${fmtNum((e.totals&&e.totals.payer)||0)} DA</span></td>
       <td><span style="font-size:12.5px; color:var(--slate);">${lvEsc(e.createdByName) || '—'}</span></td>
       <td>
         <button class="btn btn-ghost btn-sm" onclick="lvReopen('${e.key}')">Revoir / Imprimer</button>
         <button class="btn btn-ghost btn-sm" onclick="lvEditNumero('${e.key}')" title="Modifier le numéro et la date de facture">✎ N°/Date</button>
+        ${e.annulee
+          ? `<button class="btn btn-ghost btn-sm" onclick="lvRestoreInvoice('${e.key}')">Rétablir</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="lvEditLines('${e.key}')" title="Corriger la quantité ou le prix">Corriger</button>
+             <button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="lvCancelInvoice('${e.key}')">Annuler</button>`}
       </td>
-    </tr>`).join('');
+    </tr>`;
+  }).join('');
   // pagination : 50 factures par page (toujours affichée)
   pager.style.display = 'flex';
   const from = lvPage*LV_PAGE_SIZE + 1, to = Math.min((lvPage+1)*LV_PAGE_SIZE, lvFiltered.length);
@@ -2802,10 +2863,12 @@ document.getElementById('lvExportBtn').onclick = ()=>{
   if(!lvFiltered.length){ toast('Aucune facture à exporter.'); return; }
   const data = lvFiltered.map(e=>({
     'Facture N°': e.numero, 'Date': fmtDateDMY(e.date), 'Wilaya': `${e.wilayaCode} - ${e.wilaya}`, 'Livreur': e.livreurNom,
-    'Activité': e.activite, 'Quantité': lvQty(e), 'Montant (DA)': (e.totals&&e.totals.payer)||0, 'Créé par': e.createdByName || ''
+    'Activité': e.activite, 'Quantité': lvQty(e), 'Montant (DA)': e.annulee ? 0 : ((e.totals&&e.totals.payer)||0),
+    'Montant d\'origine (DA)': (e.totals&&e.totals.payer)||0, 'État': e.annulee ? 'Annulée' : 'Valide',
+    'Motif d\'annulation': e.annulee ? (e.motifAnnulation||'') : '', 'Créé par': e.createdByName || ''
   }));
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:12},{wch:12},{wch:20},{wch:26},{wch:26},{wch:10},{wch:14},{wch:20}];
+  ws['!cols'] = [{wch:12},{wch:12},{wch:20},{wch:26},{wch:26},{wch:10},{wch:14},{wch:18},{wch:10},{wch:28},{wch:20}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Factures livreurs');
   const f = lvCurrentFilters();
@@ -2813,19 +2876,447 @@ document.getElementById('lvExportBtn').onclick = ()=>{
   XLSX.writeFile(wb, 'factures-livreurs' + suffix + '.xlsx');
 };
 
+// ================= ANNUAIRE DES LIVREURS + CORRECTION / ANNULATION DES FACTURES =================
+// ---------- fenêtre modale générique ----------
+function lvModal(opts){
+  const ov = document.getElementById('lvModal');
+  const okBtn = document.getElementById('lvModalOk'), cancelBtn = document.getElementById('lvModalCancel');
+  document.getElementById('lvModalTitle').textContent = opts.title || '';
+  document.getElementById('lvModalBody').innerHTML = opts.body || '';
+  document.getElementById('lvModalError').textContent = '';
+  document.getElementById('lvModalBox').style.maxWidth = opts.maxWidth || '560px';
+  okBtn.textContent = opts.okLabel || 'Enregistrer';
+  okBtn.style.display = opts.hideOk ? 'none' : '';
+  cancelBtn.textContent = opts.cancelLabel || 'Annuler';
+  ov.style.display = 'flex';
+  return new Promise(resolve=>{
+    const close = (r)=>{ ov.style.display = 'none'; document.getElementById('lvModalBody').innerHTML = ''; resolve(r); };
+    cancelBtn.onclick = ()=>close(null);
+    okBtn.onclick = async ()=>{
+      okBtn.disabled = true;
+      try{
+        const res = await opts.onOk();
+        if(res && res.error){ document.getElementById('lvModalError').textContent = res.error; }
+        else close(res && res.value !== undefined ? res.value : true);
+      }catch(e){ console.error(e); document.getElementById('lvModalError').textContent = 'Erreur inattendue.'; }
+      finally{ okBtn.disabled = false; }
+    };
+    if(opts.onOpen) opts.onOpen();
+  });
+}
+const lvTxt = (s)=>String(s==null?'':s).normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();
+const lvVal = (id)=>document.getElementById(id).value.trim();
+function lvParseDernier(v){
+  const t = String(v||'').trim();
+  if(!t) return { empty:true };
+  const m = t.match(/^(\d{2})\s*\/\s*(\d{1,6})$/);
+  if(!m) return { error:true };
+  return { annee: 2000 + parseInt(m[1],10), n: parseInt(m[2],10) };
+}
+function lvNumFromNumero(numero){ const m = String(numero||'').match(/^(\d{2})\/(\d+)$/); return m ? { annee: 2000+parseInt(m[1],10), n: parseInt(m[2],10) } : null; }
+
+// ---------- annuaire : liste ----------
+let ldAll = [], ldCounters = {}, ldFiltered = [], ldPage = 0;
+const LD_PAGE_SIZE = 50;
+async function renderLivreurDir(){
+  const [a, b] = await Promise.all([ sb.from('livreurs').select('*').order('nom', { ascending:true }), sb.from('compteurs_livreur').select('*') ]);
+  ldAll = a.data || [];
+  livreursCache = ldAll;
+  ldCounters = {};
+  (b.data || []).forEach(c=>{ (ldCounters[c.livreur_id] = ldCounters[c.livreur_id] || []).push(c); });
+  const wSel = document.getElementById('ldWilayaFilter'), cur = wSel.value;
+  const codes = [...new Set(ldAll.map(l=>l.wilaya_code))].sort();
+  wSel.innerHTML = '<option value="">Toutes les wilayas</option>' + codes.map(c=>`<option value="${c}">${c} – ${lvEsc(lvWilayaName(c))}</option>`).join('');
+  if(codes.includes(cur)) wSel.value = cur;
+  ldPage = 0;
+  ldApplyFilters();
+}
+function ldApplyFilters(){
+  const q = norm(document.getElementById('ldSearch').value);
+  const w = document.getElementById('ldWilayaFilter').value;
+  const st = document.getElementById('ldStatutFilter').value;
+  ldFiltered = ldAll.filter(l=>{
+    if(w && l.wilaya_code!==w) return false;
+    if(st==='actif' && l.actif===false) return false;
+    if(st==='inactif' && l.actif!==false) return false;
+    if(q && !norm(l.nom).includes(q)) return false;
+    return true;
+  });
+  ldRender();
+}
+function ldLastNumero(id){
+  const list = (ldCounters[id] || []).filter(c=>c.dernier_numero>0).sort((x,y)=>y.annee-x.annee);
+  return list.length ? lvFormatNumero(list[0].dernier_numero, list[0].annee) : '—';
+}
+function ldRender(){
+  const body = document.getElementById('ldBody'), table = document.getElementById('ldTable'), empty = document.getElementById('ldEmpty'), pager = document.getElementById('ldPager');
+  const actifs = ldAll.filter(l=>l.actif!==false).length;
+  document.getElementById('ldSummary').innerHTML =
+    `<div><span style="color:var(--slate); font-weight:600;">Livreurs affichés</span> <b>${ldFiltered.length}</b></div>` +
+    `<div><span style="color:var(--slate); font-weight:600;">Actifs</span> <b>${actifs}</b> / ${ldAll.length}</div>`;
+  if(!ldFiltered.length){ body.innerHTML = ''; table.style.display = 'none'; empty.style.display = ''; pager.style.display = 'none'; return; }
+  empty.style.display = 'none'; table.style.display = '';
+  const totalPages = Math.max(1, Math.ceil(ldFiltered.length/LD_PAGE_SIZE));
+  if(ldPage > totalPages-1) ldPage = totalPages-1;
+  body.innerHTML = ldFiltered.slice(ldPage*LD_PAGE_SIZE, (ldPage+1)*LD_PAGE_SIZE).map(l=>{
+    const actif = l.actif!==false;
+    return `<tr style="${actif?'':'opacity:.6;'}">
+      <td style="font-weight:600;">${lvEsc(l.nom)}</td>
+      <td>${lvEsc(l.wilaya_code)} – ${lvEsc(l.wilaya)}</td>
+      <td>${lvEsc(l.activite)}</td>
+      <td>${lvEsc(l.adresse)}</td>
+      <td>${lvEsc(l.nif)}</td>
+      <td>${lvEsc(l.immatriculation)}</td>
+      <td>${lvEsc(l.ai)}</td>
+      <td class="num">${l.prix_unitaire!=null ? fmtNum(l.prix_unitaire) : '—'}</td>
+      <td>${ldLastNumero(l.id)}</td>
+      <td><span class="lv-badge ${actif?'ok':''}">${actif?'Actif':'Désactivé'}</span></td>
+      <td>
+        <button class="btn btn-ghost btn-sm" onclick="ldEdit('${l.id}')">Modifier</button>
+        <button class="btn btn-ghost btn-sm" onclick="ldToggle('${l.id}')">${actif?'Désactiver':'Réactiver'}</button>
+      </td>
+    </tr>`;
+  }).join('');
+  pager.style.display = 'flex';
+  const from = ldPage*LD_PAGE_SIZE+1, to = Math.min((ldPage+1)*LD_PAGE_SIZE, ldFiltered.length);
+  document.getElementById('ldPagerInfo').textContent = `Page ${ldPage+1} sur ${totalPages} — livreurs ${from} à ${to} sur ${ldFiltered.length} (${LD_PAGE_SIZE} par page)`;
+  document.getElementById('ldPagerPrev').disabled = ldPage===0;
+  document.getElementById('ldPagerNext').disabled = (ldPage+1)>=totalPages;
+}
+['ldWilayaFilter','ldStatutFilter'].forEach(id=>{ document.getElementById(id).onchange = ()=>{ ldPage = 0; ldApplyFilters(); }; });
+let ldSearchDebounce = null;
+document.getElementById('ldSearch').addEventListener('input', ()=>{ clearTimeout(ldSearchDebounce); ldSearchDebounce = setTimeout(()=>{ ldPage = 0; ldApplyFilters(); }, 250); });
+document.getElementById('ldPagerPrev').onclick = ()=>{ if(ldPage>0){ ldPage--; ldRender(); window.scrollTo({ top:0, behavior:'smooth' }); } };
+document.getElementById('ldPagerNext').onclick = ()=>{ if((ldPage+1)*LD_PAGE_SIZE < ldFiltered.length){ ldPage++; ldRender(); window.scrollTo({ top:0, behavior:'smooth' }); } };
+document.getElementById('ldBackBtn').onclick = ()=>switchView('livreur');
+document.getElementById('lvDirBtn').onclick = ()=>switchView('livreurDir');
+
+async function ldToggle(id){
+  const l = ldAll.find(x=>x.id===id); if(!l) return;
+  const actif = l.actif!==false;
+  if(actif){
+    const ok = await showConfirmModal(`Désactiver « ${l.nom} » ? Il n'apparaîtra plus dans les suggestions de facturation (ses factures et sa numérotation sont conservées). Vous pourrez le réactiver à tout moment.`, 'Désactiver');
+    if(!ok) return;
+  }
+  const { error } = await sb.from('livreurs').update({ actif: !actif, updated_at: new Date().toISOString() }).eq('id', id);
+  if(error){ console.error(error); toast('Erreur de mise à jour'); return; }
+  l.actif = !actif;
+  toast(actif ? 'Livreur désactivé.' : 'Livreur réactivé.');
+  ldApplyFilters();
+}
+
+// ---------- annuaire : ajout / modification ----------
+async function ldEdit(id){
+  const l = id ? ldAll.find(x=>x.id===id) : null;
+  if(id && !l) return;
+  let maxUsed = {};   // année -> plus grand numéro déjà facturé
+  if(l){
+    const { data } = await sb.from('factures_livreur').select('numero').eq('livreur_id', l.id);
+    (data || []).forEach(f=>{ const p = lvNumFromNumero(f.numero); if(p && p.n > (maxUsed[p.annee]||0)) maxUsed[p.annee] = p.n; });
+  }
+  const counters = l ? [...(ldCounters[l.id] || [])].sort((a,b)=>b.annee-a.annee) : [];
+  const years = [...new Set([...counters.map(c=>c.annee), ...Object.keys(maxUsed).map(Number)])].sort((a,b)=>b-a);
+  const fld = (label, idv, val, extra)=>`<div class="field"><label>${label}</label><input id="${idv}" value="${lvEsc(val)}" ${extra||''}></div>`;
+  const wilayaField = l
+    ? `<div class="field"><label>Wilaya</label><input value="${lvEsc(l.wilaya_code+' – '+l.wilaya)}" readonly style="background:#F4F5F7; color:var(--slate); cursor:not-allowed;"></div>`
+    : `<div class="field"><label>Wilaya</label><select id="ld_wilaya"><option value="">— Choisir la wilaya —</option>${WILAYAS.map(([c,n])=>`<option value="${c}">${c} – ${lvEsc(n)}</option>`).join('')}</select></div>`;
+  const counterBlock = l
+    ? `<div style="margin-top:16px; font-weight:700; font-size:13px;">Numérotation des factures</div>
+       <div style="font-size:11.5px; color:var(--slate); margin:3px 0 8px;">Dernier numéro utilisé par année. La prochaine facture prendra le numéro suivant. Il ne peut pas être inférieur au plus grand numéro déjà facturé.</div>
+       <table style="font-size:12.5px;"><thead><tr><th>Année</th><th class="num">Dernier numéro</th><th class="num">Déjà facturé jusqu'à</th></tr></thead><tbody>
+       ${years.map(y=>{ const c = counters.find(x=>x.annee===y); return `<tr><td>${y}</td><td class="num"><input type="number" min="0" step="1" data-year="${y}" class="ld-counter" value="${c?c.dernier_numero:0}" style="width:100px; text-align:right; border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;"></td><td class="num">${maxUsed[y]||0}</td></tr>`; }).join('')}
+       <tr><td><input type="number" id="ld_newYear" placeholder="Année" min="2020" max="2100" style="width:80px; border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;"></td><td class="num"><input type="number" id="ld_newYearNum" placeholder="Ajouter" min="0" step="1" style="width:100px; text-align:right; border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;"></td><td></td></tr>
+       </tbody></table>`
+    : `<div class="field" style="margin-top:12px;"><label>Dernier N° de facture déjà utilisé (AA/NNNNN) — facultatif</label><input id="ld_dernier" placeholder="ex. 26/00012"></div>`;
+  const body = `<div class="grid">
+      ${fld('Nom du livreur','ld_nom', l?l.nom:'')}
+      ${wilayaField}
+      ${fld('Activité','ld_activite', l?(l.activite||''):LV_DEFAULT_ACTIVITE)}
+      ${fld('Adresse','ld_adresse', l?(l.adresse||''):'')}
+      ${fld('NIF','ld_nif', l?(l.nif||''):'')}
+      ${fld("N° d'immatriculation",'ld_immat', l?(l.immatriculation||''):'')}
+      ${fld('N° AI','ld_ai', l?(l.ai||''):'')}
+      ${fld('Prix unitaire (DA)','ld_prix', l && l.prix_unitaire!=null ? l.prix_unitaire : '', 'type="number" min="0" step="0.01"')}
+    </div>${counterBlock}`;
+  const done = await lvModal({
+    title: l ? 'Modifier le livreur' : 'Ajouter un livreur', body, maxWidth:'680px',
+    onOk: async ()=>{
+      const nom = lvVal('ld_nom');
+      if(!nom) return { error:'Le nom du livreur est requis.' };
+      const prixRaw = lvVal('ld_prix');
+      const prix = prixRaw === '' ? null : parseFloat(prixRaw);
+      if(prix !== null && (isNaN(prix) || prix < 0)) return { error:'Prix unitaire invalide.' };
+      const fields = { nom, nom_norm: norm(nom), activite: lvVal('ld_activite'), adresse: lvVal('ld_adresse'), nif: lvVal('ld_nif'), immatriculation: lvVal('ld_immat'), ai: lvVal('ld_ai'), prix_unitaire: prix, updated_at: new Date().toISOString() };
+      const counterUpserts = [];
+      let livreurId = l ? l.id : null;
+      if(l){
+        for(const inp of document.querySelectorAll('.ld-counter')){
+          const y = parseInt(inp.dataset.year,10), v = parseInt(inp.value,10);
+          const old = (counters.find(c=>c.annee===y)||{}).dernier_numero || 0;
+          if(isNaN(v) || v < 0) return { error:`Année ${y} : numéro invalide.` };
+          if(v < (maxUsed[y]||0)) return { error:`Année ${y} : le dernier numéro ne peut pas être inférieur à ${maxUsed[y]} (déjà facturé).` };
+          if(v !== old) counterUpserts.push({ annee:y, dernier_numero:v });
+        }
+        const ny = parseInt(document.getElementById('ld_newYear').value,10), nn = document.getElementById('ld_newYearNum').value;
+        if(!isNaN(ny) || nn !== ''){
+          const nv = parseInt(nn,10);
+          if(isNaN(ny) || ny<2020 || ny>2100 || isNaN(nv) || nv<0) return { error:"Ligne d'ajout : saisissez une année valide et un numéro." };
+          if(years.includes(ny)) return { error:`L'année ${ny} existe déjà dans la liste.` };
+          counterUpserts.push({ annee:ny, dernier_numero:nv });
+        }
+        const { error } = await sb.from('livreurs').update(fields).eq('id', l.id);
+        if(error) return { error: error.code==='23505' ? 'Un livreur portant ce nom existe déjà dans cette wilaya.' : "Erreur d'enregistrement." };
+      } else {
+        const code = document.getElementById('ld_wilaya').value;
+        if(!code) return { error:'Choisissez la wilaya.' };
+        const dn = lvParseDernier(document.getElementById('ld_dernier').value);
+        if(dn.error) return { error:'Format du dernier numéro : AA/NNNNN (ex. 26/00012).' };
+        const { data, error } = await sb.from('livreurs').insert({ ...fields, wilaya_code:code, wilaya:lvWilayaName(code), actif:true }).select().single();
+        if(error) return { error: error.code==='23505' ? 'Ce livreur existe déjà dans cette wilaya.' : "Erreur d'enregistrement." };
+        livreurId = data.id;
+        if(!dn.empty) counterUpserts.push({ annee:dn.annee, dernier_numero:dn.n });
+      }
+      if(counterUpserts.length){
+        const { error } = await sb.from('compteurs_livreur').upsert(counterUpserts.map(c=>({ livreur_id:livreurId, ...c })), { onConflict:'livreur_id,annee' });
+        if(error){ console.error(error); return { error:'Livreur enregistré, mais erreur sur la numérotation.' }; }
+      }
+      return { value:true };
+    }
+  });
+  if(done){ toast(l ? 'Livreur mis à jour.' : 'Livreur ajouté.'); renderLivreurDir(); }
+}
+document.getElementById('ldAddBtn').onclick = ()=>ldEdit(null);
+
+// ---------- annuaire : import Excel ----------
+function lvParseWilaya(v){
+  const t = String(v||'').trim();
+  if(!t) return null;
+  const m = t.match(/^(\d{1,2})(?!\d)/);
+  if(m){ const code = m[1].padStart(2,'0'); return WILAYAS.find(w=>w[0]===code) ? code : null; }
+  const k = lvTxt(t);
+  const w = WILAYAS.find(x=>lvTxt(x[1])===k);
+  return w ? w[0] : null;
+}
+function ldHeaderField(h){
+  const t = lvTxt(h);
+  if(t.startsWith('nom')) return 'nom';
+  if(t.startsWith('wilaya')) return 'wilaya';
+  if(t.startsWith('activite')) return 'activite';
+  if(t.startsWith('adresse')) return 'adresse';
+  if(t === 'nif') return 'nif';
+  if(t.includes('immatriculation')) return 'immat';
+  if(t === 'n ai' || t === 'ai' || t === 'no ai') return 'ai';
+  if(t.startsWith('prix')) return 'prix';
+  if(t.startsWith('dernier')) return 'dernier';
+  return null;
+}
+function ldParseWorkbook(wb){
+  const sheetName = wb.SheetNames.includes('Livreurs') ? 'Livreurs' : (wb.SheetNames.find(n=>!['Instructions','Wilayas'].includes(n)) || wb.SheetNames[0]);
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { header:1, defval:'', raw:false });
+  let hi = -1, cols = {};
+  for(let i=0; i<Math.min(rows.length, 15); i++){
+    const map = {};
+    rows[i].forEach((h,ci)=>{ const f = ldHeaderField(h); if(f && !(f in map)) map[f] = ci; });
+    if('nom' in map && 'wilaya' in map){ hi = i; cols = map; break; }
+  }
+  if(hi < 0) return { fatal:"Colonnes « Nom du livreur » et « Wilaya » introuvables. Utilisez le modèle Excel." };
+  const sci = /^\d(\.\d+)?e\+\d+$/i;
+  const valid = [], errors = [], seen = new Set();
+  let skipped = 0;
+  for(let r=hi+1; r<rows.length; r++){
+    const row = rows[r], line = r+1;
+    const g = (f)=> f in cols ? String(row[cols[f]]==null?'':row[cols[f]]).trim() : '';
+    const nom = g('nom');
+    if(!nom && !g('wilaya') && !g('adresse') && !g('nif')){ continue; }
+    if(/^exemple/i.test(nom)){ skipped++; continue; }
+    if(!nom){ errors.push({ line, msg:'nom manquant' }); continue; }
+    const code = lvParseWilaya(g('wilaya'));
+    if(!code){ errors.push({ line, msg:`wilaya non reconnue pour « ${nom} »` }); continue; }
+    const bad = ['nif','immat','ai'].find(f=>sci.test(g(f)));
+    if(bad){ errors.push({ line, msg:`« ${nom} » : numéro illisible (format scientifique) — mettez la colonne au format texte` }); continue; }
+    const dn = lvParseDernier(g('dernier'));
+    if(dn.error){ errors.push({ line, msg:`« ${nom} » : dernier N° invalide (attendu AA/NNNNN)` }); continue; }
+    let prix = null;
+    if(g('prix') !== ''){ prix = parseFloat(g('prix').replace(/\s/g,'').replace(',','.')); if(isNaN(prix) || prix < 0){ errors.push({ line, msg:`« ${nom} » : prix unitaire invalide` }); continue; } }
+    const key = norm(nom) + '|' + code;
+    if(seen.has(key)){ errors.push({ line, msg:`« ${nom} » apparaît deux fois dans la même wilaya` }); continue; }
+    seen.add(key);
+    valid.push({ nom, code, activite:g('activite'), adresse:g('adresse'), nif:g('nif'), immat:g('immat'), ai:g('ai'), prix, dernier:dn.empty ? null : dn, line });
+  }
+  return { valid, errors, skipped };
+}
+document.getElementById('ldImportBtn').onclick = ()=>document.getElementById('ldFileInput').click();
+document.getElementById('ldFileInput').onchange = async (ev)=>{
+  const file = ev.target.files[0]; ev.target.value = '';
+  if(!file) return;
+  let parsed;
+  try{ parsed = ldParseWorkbook(XLSX.read(await file.arrayBuffer(), { type:'array' })); }
+  catch(e){ console.error(e); toast('Fichier Excel illisible.'); return; }
+  if(parsed.fatal){ toast(parsed.fatal); return; }
+  const { valid, errors, skipped } = parsed;
+  const existing = (l)=>ldAll.find(x=>x.nom_norm===norm(l.nom) && x.wilaya_code===l.code);
+  const nUpd = valid.filter(existing).length, nNew = valid.length - nUpd;
+  const nCnt = valid.filter(v=>v.dernier).length;
+  const body = `<div style="font-size:13.5px; line-height:1.8;">
+      <div><b>${valid.length}</b> livreur(s) prêt(s) à importer : <b>${nNew}</b> nouveau(x), <b>${nUpd}</b> déjà existant(s) à compléter.</div>
+      <div><b>${nCnt}</b> dernier(s) numéro(s) de facture à enregistrer.${skipped?` ${skipped} ligne(s) d'exemple ignorée(s).`:''}</div>
+      ${nUpd ? `<div style="font-size:12px; color:var(--slate);">Pour les livreurs déjà existants, seules les cellules renseignées dans le fichier remplacent les informations actuelles ; un numéro de facture n'est jamais abaissé.</div>` : ''}
+      ${errors.length ? `<div style="margin-top:10px; color:var(--red); font-weight:700;">${errors.length} ligne(s) ignorée(s) :</div>
+        <ul style="margin:4px 0 0 18px; font-size:12.5px; color:var(--red);">${errors.slice(0,15).map(e=>`<li>ligne ${e.line} : ${lvEsc(e.msg)}</li>`).join('')}${errors.length>15?`<li>… et ${errors.length-15} autre(s)</li>`:''}</ul>` : ''}
+    </div>`;
+  const done = await lvModal({
+    title:"Importer des livreurs", body, maxWidth:'620px', hideOk: !valid.length, okLabel:`Importer ${valid.length} livreur(s)`, cancelLabel: valid.length ? 'Annuler' : 'Fermer',
+    onOk: async ()=>{
+      const now = new Date().toISOString();
+      const payload = valid.map(v=>{
+        const ex = existing(v);
+        return {
+          nom_norm: norm(v.nom), nom: v.nom, wilaya_code: v.code, wilaya: lvWilayaName(v.code),
+          activite: v.activite || (ex && ex.activite) || LV_DEFAULT_ACTIVITE,
+          adresse: v.adresse || (ex && ex.adresse) || '', nif: v.nif || (ex && ex.nif) || '',
+          immatriculation: v.immat || (ex && ex.immatriculation) || '', ai: v.ai || (ex && ex.ai) || '',
+          prix_unitaire: v.prix != null ? v.prix : (ex ? ex.prix_unitaire : null), actif:true, updated_at: now
+        };
+      });
+      const idByKey = {};
+      for(let i=0; i<payload.length; i+=100){
+        const { data, error } = await sb.from('livreurs').upsert(payload.slice(i,i+100), { onConflict:'nom_norm,wilaya_code' }).select('id,nom_norm,wilaya_code');
+        if(error){ console.error(error); return { error:"Erreur d'enregistrement des livreurs." + (i ? ` (${i} déjà importé(s))` : '') }; }
+        (data||[]).forEach(d=>{ idByKey[d.nom_norm+'|'+d.wilaya_code] = d.id; });
+      }
+      const wanted = valid.filter(v=>v.dernier).map(v=>({ livreur_id: idByKey[norm(v.nom)+'|'+v.code], annee:v.dernier.annee, dernier_numero:v.dernier.n })).filter(c=>c.livreur_id);
+      if(wanted.length){
+        const ids = [...new Set(wanted.map(c=>c.livreur_id))];
+        const current = {};
+        for(let i=0; i<ids.length; i+=100){
+          const { data } = await sb.from('compteurs_livreur').select('*').in('livreur_id', ids.slice(i,i+100));
+          (data||[]).forEach(c=>{ current[c.livreur_id+'|'+c.annee] = c.dernier_numero; });
+        }
+        const toWrite = wanted.map(c=>({ ...c, dernier_numero: Math.max(c.dernier_numero, current[c.livreur_id+'|'+c.annee] || 0) }));
+        for(let i=0; i<toWrite.length; i+=100){
+          const { error } = await sb.from('compteurs_livreur').upsert(toWrite.slice(i,i+100), { onConflict:'livreur_id,annee' });
+          if(error){ console.error(error); return { error:'Livreurs importés, mais erreur sur la numérotation.' }; }
+        }
+      }
+      return { value:true };
+    }
+  });
+  if(done){ toast(`${valid.length} livreur(s) importé(s).`); renderLivreurDir(); }
+};
+document.getElementById('ldTemplateBtn').onclick = ()=>{
+  const headers = ['Nom du livreur','Wilaya',"Activité",'Adresse','NIF',"N° d'immatriculation",'N° AI','Prix unitaire (DA)','Dernier N° de facture (AA/NNNNN)'];
+  const example = ['EXEMPLE NOM PRÉNOM (à supprimer)','21 - Skikda','Livreur à vélo ou à scooter','CITE EXEMPLE 12 SKIKDA','19921010280415602180','109908040280424186','2000254761',150,'26/00012'];
+  const ws = XLSX.utils.aoa_to_sheet([headers, example]);
+  ws['!cols'] = [{wch:36},{wch:20},{wch:28},{wch:36},{wch:24},{wch:24},{wch:16},{wch:16},{wch:26}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Livreurs');
+  XLSX.writeFile(wb, 'modele_liste_livreurs.xlsx');
+};
+
+// ---------- factures : correction des lignes ----------
+let lvEl = { rows:[] };
+function lvElTotal(){ return Math.round(lvEl.rows.reduce((s,r)=>s + (r.qte||0)*(r.pu||0), 0) * 100) / 100; }
+function lvElRender(){
+  const inp = 'border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;';
+  document.getElementById('lvElBody').innerHTML = lvEl.rows.map((r,i)=>`<tr>
+    <td><input type="text" value="${lvEsc(r.description)}" oninput="lvElUpdate(${i},'description',this.value)" style="width:200px; ${inp}"></td>
+    <td class="num"><input type="number" min="0" step="1" value="${r.qte||0}" oninput="lvElUpdate(${i},'qte',this.value)" style="width:80px; text-align:right; ${inp}"></td>
+    <td class="num"><input type="number" min="0" step="0.01" value="${r.pu||0}" oninput="lvElUpdate(${i},'pu',this.value)" style="width:90px; text-align:right; ${inp}"></td>
+    <td class="num" id="lvElM-${i}">${fmtNum((lvEl.rows[i].qte||0)*(lvEl.rows[i].pu||0))}</td>
+    <td>${lvEl.rows.length>1 ? `<button class="rm-btn" onclick="lvElRemove(${i})" title="Retirer">✕</button>` : ''}</td>
+  </tr>`).join('');
+  document.getElementById('lvElTotal').textContent = fmtNum(lvElTotal()) + ' DA';
+}
+function lvElUpdate(i, f, v){
+  const r = lvEl.rows[i]; if(!r) return;
+  if(f==='description') r.description = v; else r[f] = parseFloat(v)||0;
+  const c = document.getElementById('lvElM-'+i); if(c) c.textContent = fmtNum((r.qte||0)*(r.pu||0));
+  document.getElementById('lvElTotal').textContent = fmtNum(lvElTotal()) + ' DA';
+}
+function lvElRemove(i){ lvEl.rows.splice(i,1); if(!lvEl.rows.length) lvEl.rows.push({ description:'Livraison colis', qte:0, pu:LV_DEFAULT_PU }); lvElRender(); }
+function lvElAdd(){ const last = lvEl.rows[lvEl.rows.length-1] || {}; lvEl.rows.push({ description:'Livraison colis', qte:0, pu:last.pu||LV_DEFAULT_PU }); lvElRender(); }
+function lvHistEntry(action, motif, extra){
+  return { date:new Date().toISOString(), par:currentDisplayName || '', action, motif:motif || '', ...(extra||{}) };
+}
+async function lvEditLines(key){
+  const e = lvFind(key); if(!e) return;
+  if(e.annulee){ toast('Facture annulée : rétablissez-la avant de la corriger.'); return; }
+  lvEl.rows = (e.rows||[]).map(r=>({ description:r.description, qte:r.qte||0, pu:r.pu||0 }));
+  if(!lvEl.rows.length) lvEl.rows.push({ description:'Livraison colis', qte:0, pu:LV_DEFAULT_PU });
+  const body = `<div style="font-size:12.5px; color:var(--slate); margin-bottom:10px;">Facture <b>${lvEsc(e.numero)}</b> — ${lvEsc(e.livreurNom)}. Le numéro et la date ne changent pas ; l'ancienne version est conservée dans l'historique de la facture.</div>
+    <div style="border:1px solid var(--line); border-radius:8px; overflow:auto;"><table style="font-size:12.5px;"><thead><tr><th>Description</th><th class="num">Quantité</th><th class="num">Prix unitaire</th><th class="num">Montant</th><th></th></tr></thead><tbody id="lvElBody"></tbody></table></div>
+    <div style="margin-top:8px;"><button class="btn btn-ghost btn-sm" onclick="lvElAdd()">+ Ajouter une ligne</button></div>
+    <div style="display:flex; justify-content:space-between; margin:12px 0; font-weight:700;"><span>Nouveau total</span><span id="lvElTotal"></span></div>
+    <div class="field"><label>Motif de la correction (obligatoire)</label><input id="lvElMotif" placeholder="ex. erreur de quantité"></div>`;
+  const done = await lvModal({
+    title:'Corriger la facture', body, maxWidth:'640px', onOpen: lvElRender,
+    onOk: async ()=>{
+      const motif = lvVal('lvElMotif');
+      const rows = lvEl.rows.filter(r=>(r.description||'').trim() || r.qte || r.pu).map(r=>({ description:(r.description||'').trim(), qte:r.qte||0, pu:r.pu||0, montant:Math.round((r.qte||0)*(r.pu||0)*100)/100 }));
+      const total = lvElTotal();
+      if(!rows.length || total <= 0) return { error:'Saisissez au moins une ligne avec une quantité et un prix.' };
+      const before = JSON.stringify((e.rows||[]).map(r=>[r.description, r.qte, r.pu]));
+      if(before === JSON.stringify(rows.map(r=>[r.description, r.qte, r.pu]))) return { error:'Aucune modification à enregistrer.' };
+      if(!motif) return { error:'Indiquez le motif de la correction.' };
+      const totals = { payer: total };
+      const historique = [ ...(e.historique||[]), lvHistEntry('modification', motif, { avant:{ rows:e.rows, totals:e.totals }, apres:{ rows, totals } }) ];
+      const modifieeLe = new Date().toISOString();
+      const ok = await updateFactureLivreur(key, { rows, totals, modifiee_le:modifieeLe, modifiee_par:currentDisplayName || null, historique });
+      if(!ok) return { error:"Erreur d'enregistrement." };
+      e.rows = rows; e.totals = totals; e.modifieeLe = modifieeLe; e.modifieePar = currentDisplayName || ''; e.historique = historique;
+      return { value:true };
+    }
+  });
+  if(done){ toast('Facture corrigée.'); lvApplyFilters(); }
+}
+
+// ---------- factures : annulation / rétablissement ----------
+async function lvCancelInvoice(key){
+  const e = lvFind(key); if(!e) return;
+  const body = `<div style="font-size:13.5px; line-height:1.55; margin-bottom:12px;">Annuler la facture <b>${lvEsc(e.numero)}</b> de <b>${lvEsc(e.livreurNom)}</b> (${fmtNum((e.totals&&e.totals.payer)||0)} DA) ?<br>
+      <span style="font-size:12.5px; color:var(--slate);">Son numéro reste réservé (aucun trou caché dans la numérotation). Elle reste visible dans l'historique, marquée « ANNULÉE », et n'est plus comptée dans les totaux.</span></div>
+    <div class="field"><label>Motif de l'annulation (obligatoire)</label><input id="lvCancelMotif" placeholder="ex. facture saisie en double"></div>`;
+  const done = await lvModal({
+    title:'Annuler la facture', body, okLabel:'Annuler la facture', cancelLabel:'Retour',
+    onOk: async ()=>{
+      const motif = lvVal('lvCancelMotif');
+      if(!motif) return { error:"Indiquez le motif de l'annulation." };
+      const historique = [ ...(e.historique||[]), lvHistEntry('annulation', motif) ];
+      const now = new Date().toISOString();
+      const ok = await updateFactureLivreur(key, { annulee:true, annulee_le:now, annulee_par:currentDisplayName || null, motif_annulation:motif, historique });
+      if(!ok) return { error:"Erreur d'enregistrement." };
+      e.annulee = true; e.annuleeLe = now; e.annuleePar = currentDisplayName || ''; e.motifAnnulation = motif; e.historique = historique;
+      return { value:true };
+    }
+  });
+  if(done){ toast('Facture annulée.'); lvApplyFilters(); }
+}
+async function lvRestoreInvoice(key){
+  const e = lvFind(key); if(!e) return;
+  const ok = await showConfirmModal(`Rétablir la facture ${e.numero} de ${e.livreurNom} ? Elle sera de nouveau valide et comptée dans les totaux.`, 'Rétablir');
+  if(!ok) return;
+  const historique = [ ...(e.historique||[]), lvHistEntry('rétablissement', '') ];
+  const done = await updateFactureLivreur(key, { annulee:false, annulee_le:null, annulee_par:null, motif_annulation:null, historique });
+  if(!done) return;
+  e.annulee = false; e.annuleeLe = ''; e.annuleePar = ''; e.motifAnnulation = ''; e.historique = historique;
+  toast('Facture rétablie.');
+  lvApplyFilters();
+}
+
 // ---------------- nav ----------------
 function switchView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique', client:'client', analyse:'analyse', livreur:'livreur', livreurForm:'livreur', livreurGroup:'livreur', livreurSheet:'livreur'};
+  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique', client:'client', analyse:'analyse', livreur:'livreur', livreurForm:'livreur', livreurGroup:'livreur', livreurDir:'livreur', livreurSheet:'livreur'};
   const btn = document.querySelector(`.tab-btn[data-view="${map[name]}"]`);
   if(btn) btn.classList.add('active');
-  document.querySelector('main').classList.toggle('wide', name==='historique' || name==='client' || name==='analyse' || name==='livreur');
+  document.querySelector('main').classList.toggle('wide', name==='historique' || name==='client' || name==='analyse' || name==='livreur' || name==='livreurDir');
   if(name==='historique') renderHistorique();
   if(name==='client') renderFicheClientTab();
   if(name==='analyse') renderAnalyse();
   if(name==='livreur') renderLivreurTab();
+  if(name==='livreurDir') renderLivreurDir();
 }
 document.querySelectorAll('.tab-btn').forEach(b=>{
   b.addEventListener('click', ()=>switchView(b.dataset.view));
