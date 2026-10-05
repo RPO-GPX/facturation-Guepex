@@ -236,6 +236,7 @@
   .print-measure .fs-sign{ margin-top:26px; }
   .print-measure .fs-foot{ margin-top:22px; padding-top:8px; font-size:8.7px; line-height:1.5; }
   /* ---------- Facture livreur (modèle auto-entrepreneur) ---------- */
+  #lv_wilaya:disabled, #lg_wilaya:disabled{background:#F4F5F7; color:var(--slate); cursor:not-allowed; opacity:1;}
   .lv-sel{border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; font-weight:600; color:var(--ink); cursor:pointer;}
   .lv-page{
     background:#fff; color:#111; font-family:Arial, Helvetica, 'Inter', sans-serif; font-size:11px;
@@ -500,7 +501,7 @@
       <h2 class="section-title">Livreur (auto-entrepreneur)</h2>
       <p class="section-sub">Choisissez la wilaya puis saisissez le nom : si le livreur est déjà enregistré, ses informations sont pré-remplies. Modifiable et mémorisé pour la prochaine fois.</p>
       <div class="grid">
-        <div class="field"><label>Wilaya</label><select id="lv_wilaya"></select></div>
+        <div class="field"><label>Wilaya</label><select id="lv_wilaya"></select><div id="lv_wilaya_hint" style="font-size:11px; color:var(--red); margin-top:5px; font-weight:600;"></div></div>
         <div class="field"><label>Nom du livreur</label><input id="lv_nom" list="lvNomList" autocomplete="off"><datalist id="lvNomList"></datalist></div>
         <div class="field"><label>Activité</label><input id="lv_activite"></div>
         <div class="field"><label>Adresse</label><input id="lv_adresse"></div>
@@ -549,7 +550,7 @@
       <h2 class="section-title">Facturation groupée par wilaya</h2>
       <p class="section-sub">Saisissez plusieurs livreurs d'une même wilaya : une facture est créée pour chaque livreur (numérotation propre à chacun), puis toutes sont imprimées ou exportées en PDF en une seule fois, une page par livreur.</p>
       <div class="grid g3">
-        <div class="field"><label>Wilaya</label><select id="lg_wilaya"></select></div>
+        <div class="field"><label>Wilaya</label><select id="lg_wilaya"></select><div id="lg_wilaya_hint" style="font-size:11px; color:var(--red); margin-top:5px; font-weight:600;"></div></div>
         <div class="field"><label>Date des factures</label><input type="date" id="lg_date"></div>
       </div>
     </div>
@@ -2335,6 +2336,7 @@ async function openLivreurForm(){
   document.getElementById('lv_date').value = todayISO();
   lvCurrentLivreur = null;
   lvRows = [{ description:'Livraison colis', qte:0, pu:LV_DEFAULT_PU }];
+  lvUpdateWilayaLock();
   lvRefreshNomList();
   lvRenderRows();
   lvRefreshNumeroPreview();
@@ -2357,7 +2359,15 @@ function lvMatchLivreur(){
   if(!code || !nom) return null;
   return livreursCache.find(l=>l.wilaya_code===code && l.nom_norm===norm(nom)) || null;
 }
+// La wilaya est verrouillée dès qu'un livreur est saisi/sélectionné : on ne mélange pas les wilayas
+function lvUpdateWilayaLock(){
+  const sel = document.getElementById('lv_wilaya');
+  const locked = !!sel.value && !!document.getElementById('lv_nom').value.trim();
+  sel.disabled = locked;
+  document.getElementById('lv_wilaya_hint').textContent = locked ? '🔒 Wilaya verrouillée : effacez le nom du livreur pour la changer.' : '';
+}
 function lvOnIdentityChange(){
+  lvUpdateWilayaLock();
   const found = lvMatchLivreur();
   const changed = (found ? found.id : null) !== (lvCurrentLivreur ? lvCurrentLivreur.id : null);
   lvCurrentLivreur = found;
@@ -2496,8 +2506,16 @@ async function openLivreurGroupForm(){
   lgRenderRows();
   switchView('livreurGroup');
 }
+// La wilaya est verrouillée dès qu'un livreur est saisi : tous les livreurs d'un lot appartiennent à la même wilaya
+function lgUpdateWilayaLock(){
+  const sel = document.getElementById('lg_wilaya');
+  const locked = !!sel.value && lgRows.some(r=>r.nom.trim());
+  sel.disabled = locked;
+  document.getElementById('lg_wilaya_hint').textContent = locked ? '🔒 Wilaya verrouillée : effacez tous les livreurs de la liste pour la changer.' : '';
+}
 // Une liste de suggestions par ligne : les livreurs déjà choisis (sur n'importe quelle ligne) n'y figurent plus
 function lgRefreshNomList(){
+  lgUpdateWilayaLock();
   const code = document.getElementById('lg_wilaya').value;
   const pool = livreursCache.filter(l=>!code || l.wilaya_code===code);
   const used = lgRows.map(r=>norm(r.nom));
