@@ -271,11 +271,51 @@
   tr.lv-cancelled td{opacity:.55;}
   tr.lv-cancelled td:last-child{opacity:1;}
   tr.lv-cancelled .lv-strike{text-decoration:line-through;}
-  /* Colonne d'actions toujours visible : collée au bord droit quand le tableau est plus large que l'écran */
-  #histTable .act-col, #lvHistTable .act-col{position:sticky; right:0; z-index:2; background:#fff; box-shadow:-10px 0 10px -10px rgba(22,35,74,.35);}
-  #histTable thead th.act-col{background:#16234A; z-index:3; box-shadow:none;}
-  #lvHistTable thead th.act-col{background:#FAFAFB; z-index:3; box-shadow:none;}
-  #histTable tr.row-late td.act-col{background:#FFF4F4;}
+
+  /* =============== Affichage téléphone (écrans ≤ 820 px, jamais à l'impression) =============== */
+  @media screen and (max-width:820px){
+    body{-webkit-text-size-adjust:100%;}
+    input, select, textarea{font-size:16px !important;}           /* évite le zoom automatique sur iPhone */
+    .btn{min-height:40px;}
+    .btn-sm{min-height:36px;}
+    /* barre du haut : logo + utilisateur sur la 1re ligne, onglets défilants sur la 2e */
+    .topbar{flex-wrap:wrap; padding:10px 12px; gap:8px; row-gap:6px;}
+    .brand img.logo{height:30px;}
+    .tabs{order:3; width:100%; overflow-x:auto; flex-wrap:nowrap; -webkit-overflow-scrolling:touch; padding-bottom:2px; scrollbar-width:none;}
+    .tabs::-webkit-scrollbar{display:none;}
+    .tab-btn{white-space:nowrap; padding:9px 13px; flex:0 0 auto;}
+    .topbar > div:last-child{margin-left:auto;}
+    #userBadge{display:none;}
+    main, main.wide{padding:14px 10px 70px;}
+    .card{padding:16px 14px; border-radius:10px; margin-bottom:14px;}
+    /* grilles : un seul bloc par ligne, cartes de chiffres sur 2 colonnes */
+    .grid, .grid.g3{grid-template-columns:1fr;}
+    div[style*="minmax(340px"], div[style*="minmax(300px"], div[style*="minmax(240px"]{grid-template-columns:1fr !important;}
+    div[style*="minmax(180px"], div[style*="minmax(190px"], div[style*="minmax(210px"]{grid-template-columns:repeat(auto-fit, minmax(140px, 1fr)) !important;}
+    /* barres d'outils (recherche, filtres, boutons) : les champs prennent la largeur disponible */
+    div[style*="flex-wrap:wrap"] > select, div[style*="flex-wrap:wrap"] > input[type="text"]{flex:1 1 150px; min-width:0; width:auto !important;}
+    div[style*="flex-wrap:wrap"] > .btn{flex:1 1 auto;}
+    .actions-bar{flex-wrap:wrap; justify-content:stretch;}
+    .actions-bar .btn{flex:1 1 140px;}
+    .totals{width:100%;}
+    #lvModalBox{max-width:100% !important; padding:18px 16px;}
+    #lvModal{padding:8px !important;}
+    /* tableaux de liste : une carte par ligne */
+    .m-cards, .m-cards tbody, .m-cards tr, .m-cards td{display:block; width:100%;}
+    .m-cards thead{display:none;}
+    .m-cards tr{border:1px solid var(--line); border-radius:10px; margin-bottom:10px; padding:6px 12px; background:#fff;}
+    .m-cards td{display:flex; justify-content:space-between; align-items:center; gap:12px; padding:7px 0; border-bottom:1px dashed #EFF0F3; text-align:right; flex-wrap:wrap;}
+    .m-cards td::before{content:attr(data-label); font-size:11px; font-weight:700; color:var(--slate); text-transform:uppercase; letter-spacing:.03em; text-align:left; flex:0 0 36%;}
+    .m-cards td[data-label=""]::before{display:none;}
+    .m-cards td:last-child{border-bottom:none;}
+    .m-cards td[data-label=""]{justify-content:flex-end;}
+    .m-cards td.num{text-align:right;}
+    .m-cards td textarea, .m-cards td input[type="date"], .m-cards td select{max-width:62%;}
+    /* feuilles de facture : défilement horizontal plutôt que débordement */
+    #factureSheet, #livreurSheet{overflow-x:auto;}
+    .fs-page, .lv-page{padding:14px 12px !important;}
+    .fs-meta{grid-template-columns:1fr;}
+  }
 </style>
 </head>
 <body>
@@ -3513,6 +3553,22 @@ async function lvRestoreInvoice(key){
   toast('Facture rétablie.');
   lvApplyFilters();
 }
+
+
+// ---------------- Affichage téléphone : étiquettes des colonnes pour les tableaux en mode carte ----------------
+function mLabelTable(t){
+  const heads = [...t.querySelectorAll('thead th')].map(th=>th.textContent.trim());
+  t.querySelectorAll('tbody tr').forEach(tr=>{
+    [...tr.children].forEach((td,i)=>{ td.setAttribute('data-label', heads[i] || ''); });
+  });
+}
+['histTable','lvHistTable','ldTable','ficheClientTable'].forEach(id=>{
+  const t = document.getElementById(id); if(!t) return;
+  t.classList.add('m-cards');
+  const tb = t.querySelector('tbody'); if(!tb) return;
+  new MutationObserver(()=>mLabelTable(t)).observe(tb, { childList:true });
+  mLabelTable(t);
+});
 
 // ---------------- nav ----------------
 function switchView(name){
