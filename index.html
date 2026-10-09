@@ -2563,14 +2563,14 @@ function lvRecFromDb(r){
     wilayaCode:r.wilaya_code, wilaya:r.wilaya, activite:r.activite||'', adresse:r.adresse||'',
     nif:r.nif||'', immatriculation:r.immatriculation||'', ai:r.ai||'', rows:r.rows||[], totals:r.totals||{},
     statut:r.statut||'non_paye', montantPartiel:r.montant_partiel||0, remarque:r.remarque||'',
-    createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||'',
+    createdByName:r.created_by_name||'', createdAt:r.created_at||'', dateAccuse:r.date_accuse||'',
     annulee:!!r.annulee, annuleeLe:r.annulee_le||'', annuleePar:r.annulee_par||'', motifAnnulation:r.motif_annulation||'',
     modifieeLe:r.modifiee_le||'', modifieePar:r.modifiee_par||'', historique:Array.isArray(r.historique)?r.historique:[]
   };
 }
 async function fetchFacturesLivreur(){
   try{
-    const { data, error } = await sb.from('factures_livreur').select('*').order('date', { ascending:false }).order('numero', { ascending:false });
+    const { data, error } = await sb.from('factures_livreur').select('*').order('date', { ascending:false }).order('created_at', { ascending:false });
     if(error || !data) return [];
     return data.map(lvRecFromDb);
   }catch(e){ console.error(e); return []; }
@@ -2980,6 +2980,12 @@ function lvCurrentFilters(){
     month: document.getElementById('lvMonthFilter').value
   };
 }
+// Du plus récent au plus ancien : date de la facture, puis ordre de création (les dernières saisies d'abord)
+function lvCompareRecent(a, b){
+  return String(b.date||'').localeCompare(String(a.date||''))
+      || String(b.createdAt||'').localeCompare(String(a.createdAt||''))
+      || String(b.numero||'').localeCompare(String(a.numero||''));
+}
 function lvApplyFilters(){
   const f = lvCurrentFilters();
   lvFiltered = lvAll.filter(e=>{
@@ -2987,7 +2993,7 @@ function lvApplyFilters(){
     if(f.month && (e.date||'').slice(0,7)!==f.month) return false;
     if(f.q && !(norm(e.numero).includes(f.q) || norm(e.livreurNom).includes(f.q))) return false;
     return true;
-  });
+  }).sort(lvCompareRecent);
   lvRenderTable();
 }
 ['lvWilayaFilter','lvMonthFilter'].forEach(id=>{ document.getElementById(id).onchange = ()=>{ lvPage = 0; lvApplyFilters(); }; });
