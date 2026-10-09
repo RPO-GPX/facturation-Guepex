@@ -271,6 +271,11 @@
   tr.lv-cancelled td{opacity:.55;}
   tr.lv-cancelled td:last-child{opacity:1;}
   tr.lv-cancelled .lv-strike{text-decoration:line-through;}
+  /* Colonne d'actions toujours visible : collée au bord droit quand le tableau est plus large que l'écran */
+  #histTable .act-col, #lvHistTable .act-col{position:sticky; right:0; z-index:2; background:#fff; box-shadow:-10px 0 10px -10px rgba(22,35,74,.35);}
+  #histTable thead th.act-col{background:#16234A; z-index:3; box-shadow:none;}
+  #lvHistTable thead th.act-col{background:#FAFAFB; z-index:3; box-shadow:none;}
+  #histTable tr.row-late td.act-col{background:#FFF4F4;}
 </style>
 </head>
 <body>
@@ -385,6 +390,7 @@
     </div>
 
     <div id="factureEditor" style="display:none;">
+      <div id="factureEditBanner" style="display:none; background:#FFF9DB; border:1px solid #EAD98A; color:#6B5B00; border-radius:8px; padding:10px 14px; font-size:13px; margin-bottom:14px;"></div>
       <div class="card">
         <h2 class="section-title">Informations facture</h2>
         <div class="grid g3">
@@ -477,7 +483,7 @@
       <div style="overflow:auto;">
         <table id="lvHistTable">
           <thead><tr>
-            <th>Facture N°</th><th>Date</th><th>Wilaya</th><th>Livreur</th><th class="num">Quantité</th><th class="num">Montant</th><th>Créé par</th><th></th>
+            <th>Facture N°</th><th>Date</th><th>Wilaya</th><th>Livreur</th><th class="num">Quantité</th><th class="num">Montant</th><th>Créé par</th><th class="act-col"></th>
           </tr></thead>
           <tbody id="lvHistBody"></tbody>
         </table>
@@ -676,7 +682,7 @@
       <div style="overflow:auto;">
         <table id="histTable">
           <thead><tr>
-            <th>Facture N°</th><th>Type</th><th>Date</th><th>Client</th><th class="num">Montant à payer</th><th>Statut</th><th>Date accusé</th><th>Remarque</th><th>Créé par</th><th></th>
+            <th>Facture N°</th><th>Type</th><th>Date</th><th>Client</th><th class="num">Montant à payer</th><th>Statut</th><th>Date accusé</th><th>Remarque</th><th class="act-col"></th>
           </tr></thead>
           <tbody id="histBody"></tbody>
         </table>
@@ -856,11 +862,8 @@
 
 <div id="editFactureModal" style="display:none; position:fixed; inset:0; background:rgba(24,27,32,.45); z-index:100; align-items:center; justify-content:center;">
   <div style="background:#fff; border-radius:14px; padding:28px 26px; width:100%; max-width:360px; box-shadow:0 20px 50px rgba(0,0,0,.2);">
-    <h2 class="section-title" style="margin-bottom:16px;">Modifier la facture</h2>
-    <div class="field" style="margin-bottom:14px;">
-      <label>Numéro de facture</label>
-      <input type="text" id="editFactureNumero">
-    </div>
+    <h2 class="section-title" style="margin-bottom:12px;">Modifier la date</h2>
+    <div id="editFactureInfo" style="font-size:13px; color:var(--slate); margin-bottom:14px;"></div>
     <div class="field" style="margin-bottom:18px;">
       <label>Date</label>
       <input type="date" id="editFactureDate">
@@ -1452,12 +1455,12 @@ async function fetchFacturePage(page, pageSize, filters){
   try{
     const from = page*pageSize, to = from+pageSize-1;
     let query = sb.from('factures')
-      .select('key, numero, date, raison, type, totals, statut, base_paiement, montant_partiel, remarque, created_by_name, date_accuse', { count:'exact' })
+      .select('key, numero, date, raison, type, totals, statut, base_paiement, montant_partiel, remarque, created_by_name, date_accuse, annulee, annulee_le, annulee_par, motif_annulation, modifiee_le, modifiee_par, motif_modification', { count:'exact' })
       .order('numero', { ascending:false })
       .range(from, to);
     if(filters && filters.client) query = query.eq('raison', filters.client);
     if(filters && filters.type) query = query.eq('type', filters.type);
-    if(filters && filters.statut) query = applyStatutFilter(query, filters.statut);
+    if(filters && filters.statut) query = applyStatutFilter(query, filters.statut).eq('annulee', false);
     if(filters && filters.month){
       const [y,m] = filters.month.split('-');
       const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
@@ -1469,17 +1472,21 @@ async function fetchFacturePage(page, pageSize, filters){
       key:r.key, numero:r.numero, date:r.date, raison:r.raison, type:r.type||'classique',
       totals:r.totals||{}, payer:(r.totals&&r.totals.payer)||0,
       statut:r.statut||'non_paye', basePaiement:r.base_paiement||'', montantPartiel:r.montant_partiel||0,
-      remarque:r.remarque||'', createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||''
+      remarque:r.remarque||'', createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||'',
+      annulee:!!r.annulee, annuleeLe:r.annulee_le||'', annuleePar:r.annulee_par||'', motifAnnulation:r.motif_annulation||'',
+      modifieeLe:r.modifiee_le||'', modifieePar:r.modifiee_par||'', motifModification:r.motif_modification||''
     }));
     return { rows, count: count||0 };
   }catch(e){ console.error(e); return { rows:[], count:0 }; }
 }
 async function fetchAllFacturesLight(filters){
   try{
-    let query = sb.from('factures').select('key, numero, date, raison, type, totals, statut, base_paiement, montant_partiel, remarque, created_by_name, date_accuse').order('numero', { ascending:false });
+    let query = sb.from('factures').select('key, numero, date, raison, type, totals, statut, base_paiement, montant_partiel, remarque, created_by_name, date_accuse, annulee, annulee_le, annulee_par, motif_annulation, modifiee_le, modifiee_par, motif_modification').order('numero', { ascending:false });
     if(filters && filters.client) query = query.eq('raison', filters.client);
     if(filters && filters.type) query = query.eq('type', filters.type);
     if(filters && filters.statut) query = applyStatutFilter(query, filters.statut);
+    // Les factures annulées ne sont jamais comptées (chiffre d'affaires, impayés, retards, Analyse, Fiche client), sauf demande explicite (export)
+    if(!(filters && filters.includeAnnulees)) query = query.eq('annulee', false);
     if(filters && filters.month){
       const [y,m] = filters.month.split('-');
       const lastDay = new Date(parseInt(y), parseInt(m), 0).getDate();
@@ -1491,7 +1498,9 @@ async function fetchAllFacturesLight(filters){
       key:r.key, numero:r.numero, date:r.date, raison:r.raison, type:r.type||'classique',
       totals:r.totals||{}, payer:(r.totals&&r.totals.payer)||0,
       statut:r.statut||'non_paye', basePaiement:r.base_paiement||'', montantPartiel:r.montant_partiel||0,
-      remarque:r.remarque||'', createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||''
+      remarque:r.remarque||'', createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||'',
+      annulee:!!r.annulee, annuleeLe:r.annulee_le||'', annuleePar:r.annulee_par||'', motifAnnulation:r.motif_annulation||'',
+      modifieeLe:r.modifiee_le||'', modifieePar:r.modifiee_par||'', motifModification:r.motif_modification||''
     }));
   }catch(e){ console.error(e); return []; }
 }
@@ -1564,17 +1573,27 @@ function rowAmount(r){
   return (r.frais||0) + getAssuranceAmount(r);
 }
 
-async function openFactureEditor(){
+let editingKey = null, editingOriginal = null;
+async function openFactureEditor(editRec){
   switchView('facture');
   document.getElementById('factureEmpty').style.display='none';
   document.getElementById('factureEditor').style.display='';
 
   const schema = TYPE_SCHEMAS[invoiceType];
-  const year = new Date().getFullYear();
-  const next = await getNextFactureNumber(year, schema.counterType);
-  document.getElementById('f_numero').value = schema.numeroFormat(next, year);
-  document.getElementById('f_date').value = todayISO();
-  document.getElementById('f_timbre').value = '0';
+  if(editRec){
+    document.getElementById('f_numero').value = editRec.numero;
+    document.getElementById('f_date').value = editRec.date;
+    document.getElementById('f_date').disabled = true;
+    const origTimbre = (editRec.totals && editRec.totals.timbre) || 0;
+    document.getElementById('f_timbre').value = String(origTimbre);
+  } else {
+    const year = new Date().getFullYear();
+    const next = await getNextFactureNumber(year, schema.counterType);
+    document.getElementById('f_numero').value = schema.numeroFormat(next, year);
+    document.getElementById('f_date').value = todayISO();
+    document.getElementById('f_date').disabled = false;
+    document.getElementById('f_timbre').value = '0';
+  }
 
   const isLoco = invoiceType==='location_moto';
   const isInter = invoiceType==='inter_compagnie';
@@ -1587,9 +1606,9 @@ async function openFactureEditor(){
     document.getElementById(id).style.display = isLoco ? 'none' : '';
   });
 
-  const clientName = window._pendingClientName || '';
+  const clientName = editRec ? editRec.raison : (window._pendingClientName || '');
   document.getElementById('f_raison').value = clientName;
-  const profile = await getClientProfile(clientName);
+  const profile = editRec ? { adresse:editRec.adresse, rc:editRec.rc, nif:editRec.nif, nis:editRec.nis, ai:editRec.ai, fixe:editRec.fixe, mobile:editRec.mobile, bc:editRec.bc } : await getClientProfile(clientName);
   document.getElementById('f_adresse').value = profile?.adresse || '';
   document.getElementById('f_rc').value = profile?.rc || '';
   document.getElementById('f_nif').value = profile?.nif || '';
@@ -1609,7 +1628,24 @@ async function openFactureEditor(){
     activeRows = [{ date:todayISO(), expediteur:'', designation:'TRANSPORT MARCHANDISE', tarif:0 }];
   }
 
-  timbreManualOverride = false;
+  if(editRec){
+    // le droit de timbre d'origine est conservé tel quel s'il avait été saisi à la main ; sinon il suit le calcul automatique
+    const t = editRec.totals || {};
+    const ttcOrig = t.ttc || ((t.ht||0) + (t.tva||0));
+    timbreManualOverride = schema.hasDroitTimbre ? (Math.abs((t.timbre||0) - Math.round(calcDroitTimbre(ttcOrig))) > 0.5) : false;
+    if(invoiceType==='location_moto'){
+      document.getElementById('f_periodeDu').value = editRec.periodeDu || '';
+      document.getElementById('f_periodeAu').value = editRec.periodeAu || '';
+    }
+    editingKey = editRec.key; editingOriginal = editRec;
+    document.getElementById('factureEditBanner').style.display = '';
+    document.getElementById('factureEditBanner').innerHTML = `✎ <b>Correction de la facture ${editRec.numero}</b> — le numéro et la date ne changent pas. L'ancienne version est conservée dans l'historique de la facture.`;
+    document.getElementById('generateBtn').textContent = 'Enregistrer la correction';
+    document.getElementById('backToImportBtn').textContent = '← Annuler la correction';
+  } else {
+    timbreManualOverride = false;
+    exitFactureEditMode(true);
+  }
   renderFactureRows();
   document.getElementById('f_timbre').oninput = ()=>{ timbreManualOverride = true; updateTotals(); };
 }
@@ -1618,7 +1654,22 @@ document.getElementById('goToFactureBtn').onclick = ()=>{
   openFactureEditor();
 };
 
-document.getElementById('backToImportBtn').onclick = ()=>switchView('import');
+function exitFactureEditMode(keepEditorOpen){
+  editingKey = null; editingOriginal = null;
+  document.getElementById('f_date').disabled = false;
+  document.getElementById('factureEditBanner').style.display = 'none';
+  document.getElementById('generateBtn').textContent = 'Enregistrer & générer la facture';
+  document.getElementById('backToImportBtn').textContent = "← Modifier l'import";
+  if(!keepEditorOpen){
+    activeRows = [];
+    document.getElementById('factureEditor').style.display = 'none';
+    document.getElementById('factureEmpty').style.display = '';
+  }
+}
+document.getElementById('backToImportBtn').onclick = ()=>{
+  if(editingKey){ exitFactureEditMode(false); switchView('historique'); return; }
+  switchView('import');
+};
 
 function renderFactureRows(){
   const schema = TYPE_SCHEMAS[invoiceType];
@@ -1734,6 +1785,7 @@ function updateTotals(){
 
 // ---------------- generate & save ----------------
 document.getElementById('generateBtn').onclick = async ()=>{
+  if(editingKey){ await saveFactureCorrection(); return; }
   if(!activeRows.length){ toast('Aucune ligne à facturer.'); return; }
   const dateVal = document.getElementById('f_date').value;
   const raison = document.getElementById('f_raison').value.trim();
@@ -1964,12 +2016,17 @@ function paginateRowsMeasured(rec, type){
   return pages.map(idxArr => idxArr.map(i=>rows[i]));
 }
 
+function fsCancelBanner(rec){
+  const m = rec.motif_annulation || rec.motifAnnulation || '';
+  return `<div class="lv-cancel">FACTURE ANNULÉE${m ? ' — ' + String(m).replace(/&/g,'&amp;').replace(/</g,'&lt;') : ''}</div>`;
+}
 function factureSheetHTML(rec){
   const type = rec.type || 'classique';
   // Inter-compagnie : structure fixe et connue (toujours 30 lignes) — une seule page
   // forcée, jamais de découpage, quel que soit le résultat de la mesure automatique.
   if(type === 'inter_compagnie'){
     return `<div class="fs-page fs-page-tight">
+      ${rec.annulee ? fsCancelBanner(rec) : ''}
       ${fsHeaderHTML(rec, 1, 1)}
       ${fsTableHTML(rec.rows, type)}
       ${fsTotalsHTML(rec)}
@@ -1980,6 +2037,7 @@ function factureSheetHTML(rec){
   return pages.map((pageRows, i)=>{
     const isLast = i === pages.length-1;
     return `<div class="fs-page">
+      ${rec.annulee ? fsCancelBanner(rec) : ''}
       ${fsHeaderHTML(rec, i+1, pages.length)}
       ${fsTableHTML(pageRows, type)}
       ${isLast ? fsTotalsHTML(rec) : ''}
@@ -2057,7 +2115,9 @@ async function searchFacturesGlobal(query){
       key:r.key, numero:r.numero, date:r.date, raison:r.raison, type:r.type||'classique',
       totals:r.totals||{}, payer:(r.totals&&r.totals.payer)||0,
       statut:r.statut||'non_paye', basePaiement:r.base_paiement||'', montantPartiel:r.montant_partiel||0,
-      remarque:r.remarque||'', createdByName:r.created_by_name||''
+      remarque:r.remarque||'', createdByName:r.created_by_name||'', dateAccuse:r.date_accuse||'',
+      annulee:!!r.annulee, annuleeLe:r.annulee_le||'', annuleePar:r.annulee_par||'', motifAnnulation:r.motif_annulation||'',
+      modifieeLe:r.modifiee_le||'', modifieePar:r.modifiee_par||'', motifModification:r.motif_modification||''
     }));
   }catch(e){ console.error(e); return []; }
 }
@@ -2125,22 +2185,26 @@ function renderTable(index){
     const selBg = paye ? 'var(--ok-bg)' : (partiel ? 'var(--warn-bg)' : '#fff');
     const selText = paye ? 'var(--ok)' : (partiel ? 'var(--warn)' : 'var(--slate)');
     const statutLabel = paye ? 'Payé' : (partiel ? 'Payé partiellement' : 'Impayé');
+    const ann = !!e.annulee;
     const dObj = new Date(e.date);
-    const enRetard = !paye && !isNaN(dObj) && (Date.now() - dObj.getTime()) > 15*24*3600*1000;
-    return `<tr${enRetard ? ' style="background:#FFF4F4; border-left:3px solid var(--red);"' : ''}>
-      <td>${e.numero}${enRetard ? ' <span title="En retard (+15 jours)" style="color:var(--red); font-weight:700;">⚠</span>' : ''}</td>
+    const enRetard = !paye && !ann && !isNaN(dObj) && (Date.now() - dObj.getTime()) > 15*24*3600*1000;
+    const annTip = ann ? `Annulée le ${fmtDateDMY(String(e.annuleeLe).slice(0,10))}${e.annuleePar?' par '+e.annuleePar:''} — ${e.motifAnnulation||''}` : '';
+    const modTip = e.modifieeLe ? `Corrigée le ${fmtDateDMY(String(e.modifieeLe).slice(0,10))}${e.modifieePar?' par '+e.modifieePar:''}${e.motifModification?' — '+e.motifModification:''}` : '';
+    const escA = (t)=>String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+    return `<tr${ann ? ' class="lv-cancelled"' : (enRetard ? ' class="row-late" style="background:#FFF4F4; border-left:3px solid var(--red);"' : '')}>
+      <td><span class="${ann?'lv-strike':''}">${e.numero}</span>${ann ? ` <span class="lv-badge red" title="${escA(annTip)}">ANNULÉE</span>` : ''}${(!ann && e.modifieeLe) ? ` <span class="lv-badge" title="${escA(modTip)}">corrigée</span>` : ''}${enRetard ? ' <span title="En retard (+15 jours)" style="color:var(--red); font-weight:700;">⚠</span>' : ''}</td>
       <td>${typeBadge(e.type)}</td>
       <td>${fmtDateDMY(e.date)}</td>
       <td><a href="#" onclick="openFicheClientFor('${e.raison.replace(/'/g,"\\'")}'); return false;" style="color:var(--ink); font-weight:600; text-decoration:none; border-bottom:1px dotted var(--slate);" title="Voir la fiche client">${e.raison}</a></td>
       <td class="num">
-        ${!canEdit ? `${fmtNum(refAmount)} DA` : (paye || partiel) ? `
+        ${ann ? `<span class="lv-strike">${fmtNum(ttc)} DA</span>` : !canEdit ? `${fmtNum(refAmount)} DA` : (paye || partiel) ? `
         <select onchange="onBaseChange('${e.key}', this.value)" style="border:1px solid var(--line); border-radius:6px; padding:5px 8px; font:inherit; font-weight:600; color:var(--ink); cursor:pointer;">
           <option value="ttc" ${base==='ttc'?'selected':''}>Total TTC (${fmtNum(ttc)})</option>
           <option value="total_a_payer" ${base==='total_a_payer'?'selected':''}>Total à payer (${fmtNum(e.payer)})</option>
         </select>` : `${fmtNum(ttc)} DA`}
       </td>
       <td>
-        ${!canEdit ? `
+        ${ann ? `<span class="badge" style="background:#FDECEC; color:var(--red);">Annulée</span>` : !canEdit ? `
         <span class="badge" style="background:${selBg}; color:${selText};">${statutLabel}</span>
         ${partiel ? `<div style="font-size:11.5px; color:var(--slate); margin-top:4px;">Payé : ${fmtNum(e.montantPartiel||0)} DA — Reste : ${fmtNum(Math.max(refAmount-(e.montantPartiel||0),0))} DA</div>` : ''}
         ` : `
@@ -2169,12 +2233,11 @@ function renderTable(index){
           : `<span style="font-size:12px; color:var(--slate);">${(e.remarque||'').replace(/</g,'&lt;') || '—'}</span>`
         }
       </td>
-      <td><span style="font-size:12.5px; color:var(--slate);">${e.createdByName || '—'}</span></td>
-      <td>
-        <button class="btn btn-ghost btn-sm" onclick="reopenFacture('${e.key}')">Revoir / Imprimer</button>
-        ${canEdit ? `
-        <button class="btn btn-ghost btn-sm" onclick="onEditNumero('${e.key}')" title="Modifier le numéro et la date de facture">✎ N°/Date</button>
-        ` : ''}
+      <td class="act-col">
+        <div style="display:flex; gap:6px; align-items:center; white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm" onclick="reopenFacture('${e.key}')">Revoir / Imprimer</button>
+          ${canEdit ? `<button class="btn btn-ghost btn-sm" onclick="openFactureMenu(this,'${e.key}')" title="Plus d'actions : date, Corriger, Annuler" aria-label="Plus d'actions">⋯</button>` : ''}
+        </div>
       </td>
     </tr>`;
   }).join('');
@@ -2213,7 +2276,7 @@ async function onPartialChange(key, value){
 document.getElementById('exportExcelBtn').onclick = async ()=>{
   const btn = document.getElementById('exportExcelBtn');
   btn.disabled = true; btn.textContent = 'Préparation...';
-  const all = await fetchAllFacturesLight(currentFilters());
+  const all = await fetchAllFacturesLight({ ...currentFilters(), includeAnnulees:true });
   btn.disabled = false; btn.textContent = '⬇ Exporter en Excel';
   if(!all.length){ toast('Aucune facture à exporter.'); return; }
   const data = all.map(e=>{
@@ -2226,34 +2289,35 @@ document.getElementById('exportExcelBtn').onclick = async ()=>{
       'Type': TYPE_LABELS[e.type||'classique'] || e.type,
       'Date': fmtDateDMY(e.date),
       'Client': e.raison,
-      'Montant Total H.T (DA)': ht,
-      'Montant à payer (DA)': refAmount,
-      'Statut': e.statut === 'paye' ? 'Payé' : (e.statut === 'partiel' ? 'Payé partiellement' : 'Impayé'),
-      'Payé sur la base de': (e.statut === 'paye' || e.statut === 'partiel') ? (base==='ttc' ? 'Total TTC' : 'Total à payer') : '',
-      'Montant payé partiellement (DA)': e.statut === 'partiel' ? e.montantPartiel : '',
-      'Reste à payer (DA)': e.statut === 'partiel' ? Math.max(refAmount - (e.montantPartiel||0), 0) : '',
+      'Montant Total H.T (DA)': e.annulee ? 0 : ht,
+      'Montant à payer (DA)': e.annulee ? 0 : refAmount,
+      'Statut': e.annulee ? 'Annulée' : (e.statut === 'paye' ? 'Payé' : (e.statut === 'partiel' ? 'Payé partiellement' : 'Impayé')),
+      'Payé sur la base de': (!e.annulee && (e.statut === 'paye' || e.statut === 'partiel')) ? (base==='ttc' ? 'Total TTC' : 'Total à payer') : '',
+      'Montant payé partiellement (DA)': (!e.annulee && e.statut === 'partiel') ? e.montantPartiel : '',
+      'Reste à payer (DA)': (!e.annulee && e.statut === 'partiel') ? Math.max(refAmount - (e.montantPartiel||0), 0) : '',
       'Date accusé': e.dateAccuse ? fmtDateDMY(e.dateAccuse) : '',
       'Remarque': e.remarque || '',
-      'Créé par': e.createdByName || ''
+      'Créé par': e.createdByName || '',
+      "Motif d'annulation": e.annulee ? (e.motifAnnulation || '') : ''
     };
   });
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:20},{wch:14},{wch:12},{wch:28},{wch:18},{wch:18},{wch:16},{wch:14},{wch:18},{wch:22},{wch:16},{wch:30},{wch:20}];
+  ws['!cols'] = [{wch:20},{wch:14},{wch:12},{wch:28},{wch:18},{wch:18},{wch:16},{wch:14},{wch:18},{wch:22},{wch:16},{wch:30},{wch:20},{wch:30}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Factures');
   const f = currentFilters();
   const suffix = (f.month ? '-' + f.month : '') + (f.client ? '-' + f.client.replace(/[^a-zA-Z0-9]+/g,'_') : '') + (f.type ? '-' + f.type : '') + (f.statut ? '-' + f.statut : '');
   XLSX.writeFile(wb, 'tableau-de-bord-factures' + suffix + '.xlsx');
 };
+// Fenêtre de modification de la date (le numéro de facture ne se modifie plus)
 function showEditFactureModal(numero, date){
   return new Promise(resolve=>{
     const overlay = document.getElementById('editFactureModal');
-    const numeroInput = document.getElementById('editFactureNumero');
     const dateInput = document.getElementById('editFactureDate');
     const errEl = document.getElementById('editFactureError');
     const saveBtn = document.getElementById('editFactureSaveBtn');
     const cancelBtn = document.getElementById('editFactureCancelBtn');
-    numeroInput.value = numero || '';
+    document.getElementById('editFactureInfo').innerHTML = 'Facture <b>' + String(numero || '').replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</b>';
     dateInput.value = date || '';
     errEl.textContent = '';
     overlay.style.display = 'flex';
@@ -2263,34 +2327,32 @@ function showEditFactureModal(numero, date){
       cancelBtn.removeEventListener('click', onCancel);
       resolve(result);
     }
-    function onSave(){ cleanup({ numero: numeroInput.value.trim(), date: dateInput.value }); }
+    function onSave(){ cleanup({ date: dateInput.value }); }
     function onCancel(){ cleanup(null); }
     saveBtn.addEventListener('click', onSave);
     cancelBtn.addEventListener('click', onCancel);
   });
 }
-async function onEditNumero(key){
+// L'année du numéro de facture est fixe : la date doit rester dans cette année
+function numeroYear(numero, type){
+  const t = String(numero || '');
+  if(type === 'livreur'){ const m = t.match(/^(\d{2})\//); return m ? 2000 + parseInt(m[1],10) : null; }
+  const m = t.match(/(\d{4})$/); return m ? parseInt(m[1],10) : null;
+}
+async function onEditDate(key){
   const entry = lastIndex.find(e=>e.key===key);
   if(!entry) return;
   const result = await showEditFactureModal(entry.numero, entry.date);
   if(!result) return; // annulé
-  const { numero: newNumero, date: newDate } = result;
-  if(!newNumero){ toast('Le numéro de facture est requis.'); return; }
-  const numeroChanged = newNumero !== entry.numero;
-  const dateChanged = newDate !== entry.date;
-  if(!numeroChanged && !dateChanged) return;
+  const newDate = result.date;
+  if(!newDate){ toast('La date est requise.'); return; }
+  if(newDate === entry.date) return;
+  const y = numeroYear(entry.numero, 'standard');
+  if(y && parseInt(newDate.slice(0,4),10) !== y){ toast(`La date doit rester dans l'année ${y} du numéro de facture.`); return; }
   try{
-    if(numeroChanged){
-      const { data: existing, error: checkErr } = await sb.from('factures').select('key').eq('numero', newNumero).neq('key', key).limit(1);
-      if(checkErr){ toast('Erreur de vérification.'); return; }
-      if(existing && existing.length){ toast('Ce numéro est déjà utilisé par une autre facture.'); return; }
-    }
-    const payload = {};
-    if(numeroChanged) payload.numero = newNumero;
-    if(dateChanged) payload.date = newDate;
-    const { error: updErr } = await sb.from('factures').update(payload).eq('key', key);
+    const { error: updErr } = await sb.from('factures').update({ date: newDate }).eq('key', key);
     if(updErr){ toast('Erreur lors de la mise à jour.'); return; }
-    toast('Facture mise à jour.');
+    toast('Date mise à jour.');
     loadPage();
   }catch(e){ console.error(e); toast('Erreur lors de la mise à jour.'); }
 }
@@ -2301,6 +2363,159 @@ async function reopenFacture(key){
   renderFactureSheet(rec);
   switchView('sheet');
 }
+
+// ---------------- menu "⋯" des lignes de tableau (garde les lignes compactes) ----------------
+function closeRowMenu(){
+  const m = document.getElementById('rowMenu');
+  if(m) m.remove();
+  document.removeEventListener('click', closeRowMenu, true);
+  window.removeEventListener('scroll', closeRowMenu, true);
+  window.removeEventListener('resize', closeRowMenu);
+}
+function openRowMenu(btn, items){
+  const wasOpenForThis = document.getElementById('rowMenu') && document.getElementById('rowMenu')._btn === btn;
+  closeRowMenu();
+  if(wasOpenForThis) return;
+  const m = document.createElement('div');
+  m.id = 'rowMenu'; m._btn = btn;
+  m.style.cssText = 'position:fixed; z-index:300; background:#fff; border:1px solid var(--line); border-radius:10px; box-shadow:0 10px 30px rgba(0,0,0,.18); padding:5px; min-width:190px; visibility:hidden;';
+  items.forEach(it=>{
+    const b = document.createElement('button');
+    b.type = 'button'; b.textContent = it.label;
+    b.style.cssText = 'display:block; width:100%; text-align:left; background:none; border:none; padding:9px 12px; border-radius:7px; font:inherit; font-size:13px; font-weight:600; cursor:pointer; color:' + (it.color || 'var(--ink)') + ';';
+    b.onmouseenter = ()=>{ b.style.background = '#F4F5F7'; };
+    b.onmouseleave = ()=>{ b.style.background = 'none'; };
+    b.onclick = (ev)=>{ ev.stopPropagation(); closeRowMenu(); it.fn(); };
+    m.appendChild(b);
+  });
+  document.body.appendChild(m);
+  const r = btn.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+  let left = Math.min(Math.max(8, r.right - w), window.innerWidth - w - 8);
+  let top = r.bottom + 6;
+  if(top + h > window.innerHeight - 8) top = Math.max(8, r.top - h - 6);
+  m.style.left = left + 'px'; m.style.top = top + 'px'; m.style.visibility = 'visible';
+  setTimeout(()=>{
+    document.addEventListener('click', closeRowMenu, true);
+    window.addEventListener('scroll', closeRowMenu, true);
+    window.addEventListener('resize', closeRowMenu);
+  }, 0);
+}
+function openFactureMenu(btn, key){
+  const e = lastIndex.find(x=>x.key===key); if(!e) return;
+  const items = [{ label:'✎ Modifier la date', fn:()=>onEditDate(key) }];
+  if(e.annulee) items.push({ label:'Rétablir la facture', fn:()=>restoreFacture(key) });
+  else items.push({ label:'Corriger', fn:()=>correctFacture(key) }, { label:'Annuler la facture', color:'var(--red)', fn:()=>cancelFacture(key) });
+  openRowMenu(btn, items);
+}
+function openLivreurRowMenu(btn, key){
+  const e = lvFind(key); if(!e) return;
+  const items = [{ label:'✎ Modifier la date', fn:()=>lvEditDate(key) }];
+  if(e.annulee) items.push({ label:'Rétablir la facture', fn:()=>lvRestoreInvoice(key) });
+  else items.push({ label:'Corriger', fn:()=>lvEditLines(key) }, { label:'Annuler la facture', color:'var(--red)', fn:()=>lvCancelInvoice(key) });
+  openRowMenu(btn, items);
+}
+
+// ---------------- Historique : corriger / annuler / rétablir une facture ----------------
+async function getFactureHistorique(key){
+  try{
+    const { data } = await sb.from('factures').select('historique').eq('key', key).maybeSingle();
+    return Array.isArray(data && data.historique) ? data.historique : [];
+  }catch(e){ console.error(e); return []; }
+}
+async function correctFacture(key){
+  const rec = await getFactureRecord(key);
+  if(!rec){ toast('Introuvable.'); return; }
+  if(rec.annulee){ toast('Facture annulée : rétablissez-la avant de la corriger.'); return; }
+  invoiceType = rec.type || 'classique';
+  activeRows = (rec.rows || []).map(r=>({ ...r }));
+  await openFactureEditor(rec);
+}
+async function saveFactureCorrection(){
+  const orig = editingOriginal, key = editingKey;
+  if(!orig) return;
+  if(!activeRows.length){ toast("Une facture doit garder au moins une ligne. Pour la supprimer, utilisez « Annuler »."); return; }
+  const raison = document.getElementById('f_raison').value.trim();
+  if(!raison){ toast('La raison sociale est requise.'); return; }
+  const profile = {
+    adresse: document.getElementById('f_adresse').value.trim(), rc: document.getElementById('f_rc').value.trim(),
+    nif: document.getElementById('f_nif').value.trim(), nis: document.getElementById('f_nis').value.trim(),
+    ai: document.getElementById('f_ai').value.trim(), fixe: document.getElementById('f_fixe').value.trim(),
+    mobile: document.getElementById('f_mobile').value.trim(), bc: document.getElementById('f_bc').value.trim()
+  };
+  const totals = updateTotals();
+  const schema = TYPE_SCHEMAS[invoiceType];
+  const rows = schema.manual ? activeRows.map(r=>({ ...r })) : activeRows.map(r=>({ ...r, assurance: getAssuranceAmount(r) }));
+  const isLoco = invoiceType === 'location_moto';
+  const periodeDu = isLoco ? (document.getElementById('f_periodeDu').value || null) : null;
+  const periodeAu = isLoco ? (document.getElementById('f_periodeAu').value || null) : null;
+  const o = orig.totals || {};
+  const sameTotals = Math.abs((o.ht||0)-totals.ht) < 0.005 && Math.abs((o.timbre||0)-totals.timbre) < 0.005 && Math.abs((o.payer||0)-totals.payer) < 0.005;
+  const clientSame = raison === (orig.raison||'') && ['adresse','rc','nif','nis','ai','fixe','mobile','bc'].every(k=>(profile[k]||'') === (orig[k]||''));
+  const periodeSame = (periodeDu||'') === (orig.periodeDu||'') && (periodeAu||'') === (orig.periodeAu||'');
+  if(sameTotals && clientSame && periodeSame && JSON.stringify(rows) === JSON.stringify(orig.rows||[])){ toast('Aucune modification à enregistrer.'); return; }
+
+  const wasPaid = orig.statut === 'paye' || orig.statut === 'partiel';
+  const body = `<div style="font-size:13.5px; line-height:1.6; margin-bottom:12px;">Facture <b>${lvEsc(orig.numero)}</b> — ${lvEsc(raison)}<br>
+      Total à payer : <b>${fmtNum(o.payer||0)} DA</b> → <b>${fmtNum(totals.payer)} DA</b>
+      ${wasPaid && !sameTotals ? `<div style="margin-top:8px; color:#8A6D00; background:#FFF9DB; border-radius:6px; padding:8px 10px; font-size:12.5px;">Cette facture est marquée « ${orig.statut==='paye'?'Payé':'Payé partiellement'} » : vérifiez son statut et le montant payé après la correction.</div>` : ''}</div>
+    <div class="field"><label>Motif de la correction (obligatoire)</label><input id="fcMotif" placeholder="ex. envoi retiré par erreur de saisie"></div>`;
+  const done = await lvModal({
+    title:'Enregistrer la correction', body, okLabel:'Enregistrer la correction',
+    onOk: async ()=>{
+      const motif = lvVal('fcMotif');
+      if(!motif) return { error:'Indiquez le motif de la correction.' };
+      const prev = await getFactureHistorique(key);
+      const entry = lvHistEntry('modification', motif, { avant:{ rows:orig.rows, totals:orig.totals, raison:orig.raison, adresse:orig.adresse, rc:orig.rc, nif:orig.nif, nis:orig.nis, ai:orig.ai, fixe:orig.fixe, mobile:orig.mobile, bc:orig.bc, periodeDu:orig.periodeDu||null, periodeAu:orig.periodeAu||null }, apres:{ totals } });
+      const { error } = await sb.from('factures').update({
+        raison, ...profile, periode_du:periodeDu, periode_au:periodeAu, rows, totals,
+        modifiee_le:new Date().toISOString(), modifiee_par:currentDisplayName || null, motif_modification:motif,
+        historique:[ ...prev, entry ]
+      }).eq('key', key);
+      if(error){ console.error(error); return { error:"Erreur d'enregistrement." }; }
+      return { value:true };
+    }
+  });
+  if(!done) return;
+  try{ await saveClientProfile(raison, profile); }catch(e){ console.error(e); }
+  exitFactureEditMode(false);
+  toast('Facture corrigée.');
+  switchView('historique');
+  renderStats();
+}
+async function cancelFacture(key){
+  const e = lastIndex.find(x=>x.key===key); if(!e) return;
+  const body = `<div style="font-size:13.5px; line-height:1.55; margin-bottom:12px;">Annuler la facture <b>${lvEsc(e.numero)}</b> de <b>${lvEsc(e.raison)}</b> (${fmtNum(e.payer||0)} DA) ?<br>
+      <span style="font-size:12.5px; color:var(--slate);">Son numéro reste réservé (aucun trou caché dans la numérotation). Elle reste visible dans l'historique, marquée « ANNULÉE », et n'est plus comptée dans le chiffre d'affaires, les impayés, les retards, l'Analyse ni la Fiche client.</span></div>
+    <div class="field"><label>Motif de l'annulation (obligatoire)</label><input id="fcCancelMotif" placeholder="ex. facture émise en double"></div>`;
+  const done = await lvModal({
+    title:'Annuler la facture', body, okLabel:'Annuler la facture', cancelLabel:'Retour',
+    onOk: async ()=>{
+      const motif = lvVal('fcCancelMotif');
+      if(!motif) return { error:"Indiquez le motif de l'annulation." };
+      const prev = await getFactureHistorique(key);
+      const { error } = await sb.from('factures').update({
+        annulee:true, annulee_le:new Date().toISOString(), annulee_par:currentDisplayName || null, motif_annulation:motif,
+        historique:[ ...prev, lvHistEntry('annulation', motif) ]
+      }).eq('key', key);
+      if(error){ console.error(error); return { error:"Erreur d'enregistrement." }; }
+      return { value:true };
+    }
+  });
+  if(done){ toast('Facture annulée.'); loadPage(); renderStats(); }
+}
+async function restoreFacture(key){
+  const e = lastIndex.find(x=>x.key===key); if(!e) return;
+  const ok = await showConfirmModal(`Rétablir la facture ${e.numero} de ${e.raison} ? Elle sera de nouveau valide et comptée dans les totaux.`, 'Rétablir');
+  if(!ok) return;
+  const prev = await getFactureHistorique(key);
+  const { error } = await sb.from('factures').update({
+    annulee:false, annulee_le:null, annulee_par:null, motif_annulation:null,
+    historique:[ ...prev, lvHistEntry('rétablissement', '') ]
+  }).eq('key', key);
+  if(error){ console.error(error); toast('Erreur de mise à jour'); return; }
+  toast('Facture rétablie.'); loadPage(); renderStats();
+}
+
 
 // ================= FACTURE LIVREUR (section indépendante) =================
 const WILAYAS = [
@@ -2811,13 +3026,11 @@ function lvRenderTable(){
       <td class="num"><span class="lv-strike">${lvQty(e)}</span></td>
       <td class="num"><span class="lv-strike">${fmtNum((e.totals&&e.totals.payer)||0)} DA</span></td>
       <td><span style="font-size:12.5px; color:var(--slate);">${lvEsc(e.createdByName) || '—'}</span></td>
-      <td>
-        <button class="btn btn-ghost btn-sm" onclick="lvReopen('${e.key}')">Revoir / Imprimer</button>
-        <button class="btn btn-ghost btn-sm" onclick="lvEditNumero('${e.key}')" title="Modifier le numéro et la date de facture">✎ N°/Date</button>
-        ${e.annulee
-          ? `<button class="btn btn-ghost btn-sm" onclick="lvRestoreInvoice('${e.key}')">Rétablir</button>`
-          : `<button class="btn btn-ghost btn-sm" onclick="lvEditLines('${e.key}')" title="Corriger la quantité ou le prix">Corriger</button>
-             <button class="btn btn-ghost btn-sm" style="color:var(--red);" onclick="lvCancelInvoice('${e.key}')">Annuler</button>`}
+      <td class="act-col">
+        <div style="display:flex; gap:6px; align-items:center; white-space:nowrap;">
+          <button class="btn btn-ghost btn-sm" onclick="lvReopen('${e.key}')">Revoir / Imprimer</button>
+          <button class="btn btn-ghost btn-sm" onclick="openLivreurRowMenu(this,'${e.key}')" title="Plus d'actions : date, Corriger, Annuler" aria-label="Plus d'actions">⋯</button>
+        </div>
       </td>
     </tr>`;
   }).join('');
@@ -2836,26 +3049,18 @@ async function lvReopen(key){
   document.getElementById('livreurSheet').innerHTML = livreurSheetHTML(e);
   switchView('livreurSheet');
 }
-async function lvEditNumero(key){
+async function lvEditDate(key){
   const e = lvFind(key); if(!e) return;
   const result = await showEditFactureModal(e.numero, e.date);
   if(!result) return;
-  const { numero: newNumero, date: newDate } = result;
-  if(!newNumero){ toast('Le numéro de facture est requis.'); return; }
-  const numeroChanged = newNumero !== e.numero, dateChanged = newDate !== e.date;
-  if(!numeroChanged && !dateChanged) return;
-  if(numeroChanged){
-    const { data: existing, error } = await sb.from('factures_livreur').select('key').eq('livreur_id', e.livreurId).eq('numero', newNumero).neq('key', key).limit(1);
-    if(error){ toast('Erreur de vérification.'); return; }
-    if(existing && existing.length){ toast('Ce numéro est déjà utilisé par une autre facture de ce livreur.'); return; }
-  }
-  const payload = {};
-  if(numeroChanged) payload.numero = newNumero;
-  if(dateChanged) payload.date = newDate;
-  if(await updateFactureLivreur(key, payload)){
-    if(numeroChanged) e.numero = newNumero;
-    if(dateChanged) e.date = newDate;
-    toast('Facture mise à jour.');
+  const newDate = result.date;
+  if(!newDate){ toast('La date est requise.'); return; }
+  if(newDate === e.date) return;
+  const y = numeroYear(e.numero, 'livreur');
+  if(y && parseInt(newDate.slice(0,4),10) !== y){ toast(`La date doit rester dans l'année ${y} du numéro de facture.`); return; }
+  if(await updateFactureLivreur(key, { date: newDate })){
+    e.date = newDate;
+    toast('Date mise à jour.');
     lvApplyFilters();
   }
 }
