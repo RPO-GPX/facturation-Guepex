@@ -347,6 +347,7 @@
     <button class="tab-btn active" data-view="import">Import</button>
     <button class="tab-btn" data-view="facture">Facture</button>
     <button class="tab-btn" data-view="historique">Historique</button>
+    <button class="tab-btn" data-view="avoirs">Avoirs</button>
     <button class="tab-btn" data-view="livreur">Livreur</button>
     <button class="tab-btn" data-view="client">Fiche client</button>
     <button class="tab-btn" data-view="analyse">Analyse</button>
@@ -495,7 +496,10 @@
   <div class="view" id="view-sheet">
     <div class="actions-bar no-print" style="justify-content:space-between; margin-bottom:16px;">
       <button class="btn btn-ghost" id="backFromSheetBtn">← Retour</button>
-      <button class="btn btn-primary" id="printBtn">🖨 Imprimer / Exporter en PDF</button>
+      <div style="display:flex; gap:10px; flex-wrap:wrap;">
+        <button class="btn btn-ghost" id="refaireBtn" style="display:none;">Créer la facture corrigée</button>
+        <button class="btn btn-primary" id="printBtn">🖨 Imprimer / Exporter en PDF</button>
+      </div>
     </div>
     <div id="factureSheet"></div>
   </div>
@@ -681,6 +685,40 @@
       <button class="btn btn-primary" id="lvPrintBtn">🖨 Imprimer / Exporter en PDF</button>
     </div>
     <div id="livreurSheet"></div>
+  </div>
+
+  <!-- ================= AVOIRS ================= -->
+  <div class="view" id="view-avoirs">
+    <div class="card">
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px; flex-wrap:wrap;">
+        <div>
+          <h2 class="section-title">Factures d'avoir</h2>
+          <p class="section-sub">Un avoir réduit une facture sans la modifier. Il se crée depuis l'Historique (menu « ⋯ », « Émettre un avoir »).</p>
+        </div>
+        <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+          <input type="text" id="avSearch" placeholder="🔍 Avoir, facture ou client..." style="border:1px solid var(--line); border-radius:7px; padding:6px 10px; font:inherit; font-size:12.5px; width:220px;">
+          <select id="avMonthFilter" class="lv-sel"><option value="">Tous les mois</option></select>
+          <button class="btn btn-ghost btn-sm" id="avExportBtn">⬇ Exporter en Excel</button>
+        </div>
+      </div>
+      <div id="avSummary" style="display:flex; gap:22px; flex-wrap:wrap; margin:14px 0 6px; font-size:13px;"></div>
+      <div style="overflow:auto;">
+        <table id="avTable">
+          <thead><tr>
+            <th>Avoir N°</th><th>Date</th><th>Facture d'origine</th><th>Type</th><th>Client</th><th>Nature</th><th class="num">Montant</th><th>Motif</th><th>Créé par</th><th></th>
+          </tr></thead>
+          <tbody id="avBody"></tbody>
+        </table>
+      </div>
+      <div id="avEmpty" class="empty" style="display:none;">
+        <div class="icon">📭</div><div>Aucun avoir émis pour l'instant.</div>
+      </div>
+      <div id="avPager" style="display:none; justify-content:space-between; align-items:center; margin-top:14px;">
+        <button class="btn btn-ghost btn-sm" id="avPagerPrev">← Précédent</button>
+        <span id="avPagerInfo" style="font-size:12.5px; color:var(--slate); font-weight:600;"></span>
+        <button class="btn btn-ghost btn-sm" id="avPagerNext">Suivant →</button>
+      </div>
+    </div>
   </div>
 
   <!-- ================= HISTORIQUE ================= -->
@@ -1516,6 +1554,7 @@ async function fetchFacturePage(page, pageSize, filters){
       annulee:!!r.annulee, annuleeLe:r.annulee_le||'', annuleePar:r.annulee_par||'', motifAnnulation:r.motif_annulation||'',
       modifieeLe:r.modifiee_le||'', modifieePar:r.modifiee_par||'', motifModification:r.motif_modification||''
     }));
+    await attachAvoirs(rows);
     return { rows, count: count||0 };
   }catch(e){ console.error(e); return { rows:[], count:0 }; }
 }
@@ -1534,7 +1573,7 @@ async function fetchAllFacturesLight(filters){
     }
     const { data, error } = await query;
     if(error || !data) return [];
-    return data.map(r=>({
+    const mapped = data.map(r=>({
       key:r.key, numero:r.numero, date:r.date, raison:r.raison, type:r.type||'classique',
       totals:r.totals||{}, payer:(r.totals&&r.totals.payer)||0,
       statut:r.statut||'non_paye', basePaiement:r.base_paiement||'', montantPartiel:r.montant_partiel||0,
@@ -1542,6 +1581,7 @@ async function fetchAllFacturesLight(filters){
       annulee:!!r.annulee, annuleeLe:r.annulee_le||'', annuleePar:r.annulee_par||'', motifAnnulation:r.motif_annulation||'',
       modifieeLe:r.modifiee_le||'', modifieePar:r.modifiee_par||'', motifModification:r.motif_modification||''
     }));
+    return await attachAvoirs(mapped);
   }catch(e){ console.error(e); return []; }
 }
 async function setFactureDateAccuse(key, dateAccuse){
@@ -1639,10 +1679,10 @@ async function openFactureEditor(editRec){
   const isInter = invoiceType==='inter_compagnie';
   const isEcom = invoiceType==='ecommerce';
   document.getElementById('periodeBlock').style.display = isLoco ? '' : 'none';
-  document.getElementById('addLineBar').style.display = (schema.manual && !schema.fixedGrid) ? '' : 'none';
+  document.getElementById('addLineBar').style.display = !schema.fixedGrid ? '' : 'none';
   document.getElementById('rowsCardTitle').textContent = isLoco ? 'Lignes de location' : (isInter ? 'Détail des prestations' : (isEcom ? 'Lignes de la facture' : invoiceType==='cls' ? 'Courses facturées' : 'Envois facturés'));
   document.getElementById('f_raison_label').textContent = isLoco ? 'Nom de la société' : 'Raison sociale';
-  ['f_ai_field','f_fixe_field','f_mobile_field','f_bc_field'].forEach(id=>{
+  ['f_fixe_field','f_mobile_field','f_bc_field'].forEach(id=>{
     document.getElementById(id).style.display = isLoco ? 'none' : '';
   });
 
@@ -1750,14 +1790,31 @@ function renderFactureRows(){
       </tr>`;
     }).join('');
   } else {
+    // classique et CLS : chaque cellule de la ligne est modifiable (les totaux se recalculent aussitôt)
+    const esc = (v)=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const inpStyle = 'border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;';
+    const widths = { dateExpFmt:105, dateFmt:105, tracking:150, destinataire:170, destination:140, wilayaDepart:130, wilayaDestination:140, typeVehicule:120 };
     body.innerHTML = activeRows.map((r,i)=>`
       <tr>
-        ${schema.columns.map(c=>`<td${c.num?' class="num"':''}>${rowCellValue(r,c)}</td>`).join('')}
+        ${schema.columns.map(c=>{
+          const field = c.key === 'assuranceCalc' ? 'assuranceAmount' : c.key;
+          if(c.num){
+            const val = field === 'assuranceAmount' ? (r.assuranceAmount != null ? r.assuranceAmount : (r.assurance || 0)) : (r[field] || 0);
+            return `<td class="num"><input type="number" min="0" step="0.01" value="${esc(val)}" oninput="updateRowField(${i},'${field}',this.value,true)" style="width:${c.key==='poids'?70:100}px; text-align:right; ${inpStyle}"></td>`;
+          }
+          return `<td><input type="text" value="${esc(r[field])}" oninput="updateRowField(${i},'${field}',this.value,false)" style="width:${widths[field]||130}px; ${inpStyle}"></td>`;
+        }).join('')}
         <td><button class="rm-btn" onclick="removeFactureRow(${i})" title="Retirer">✕</button></td>
       </tr>`).join('');
   }
   document.getElementById('f_rowCount').textContent = activeRows.length + (schema.manual ? ' ligne(s) au total' : ' envoi(s) au total');
   updateTotals();
+}
+function updateRowField(i, field, value, isNum){
+  const r = activeRows[i];
+  if(!r) return;
+  r[field] = isNum ? (parseFloat(value) || 0) : value;
+  if(isNum) updateTotals(); // ne touche pas au tableau, donc le champ garde le focus
 }
 function updateLocoField(i, field, value){
   const r = activeRows[i];
@@ -1789,6 +1846,10 @@ document.getElementById('addLineBtn').onclick = ()=>{
   } else if(invoiceType==='ecommerce'){
     const last = activeRows[activeRows.length-1] || {};
     activeRows.push({ date:last.date || document.getElementById('f_date').value || todayISO(), expediteur:last.expediteur||'', designation:last.designation||'TRANSPORT MARCHANDISE', tarif:0 });
+  } else if(invoiceType==='classique'){
+    activeRows.push({ dateExpFmt:'', tracking:'', destinataire:'', destination:'', poids:0, assuranceAmount:0, frais:0 });
+  } else if(invoiceType==='cls'){
+    activeRows.push({ dateFmt:'', tracking:'', wilayaDepart:'', wilayaDestination:'', typeVehicule:'', prixCourse:0, immobilisation:0, manutention:0, pointSupp:0, tarifVente:0 });
   } else {
     activeRows.push({ description:'', qtj:30, prixUnitaire:0, total:0 });
   }
@@ -1872,6 +1933,8 @@ document.getElementById('generateBtn').onclick = async ()=>{
 
   currentFacture = record;
   renderFactureSheet(record);
+  sheetBackTarget = 'facture';
+  document.getElementById('refaireBtn').style.display = 'none';
   switchView('sheet');
   toast('Facture enregistrée');
 };
@@ -1901,7 +1964,7 @@ function fsHeaderHTML(rec, pageIndex, pageCount){
       <div class="r"><div class="k">${rec.type==='location_moto' ? 'Nombre de lignes' : ((rec.type==='inter_compagnie' || rec.type==='ecommerce') ? 'Nombre de lignes' : (rec.type==='cls' ? 'Nombre total de courses' : "Nombre total d'envois"))}</div><div class="v">${rec.rows.length}</div></div>
       <div class="r"><div class="k">Adresse</div><div class="v">${rec.adresse||''}</div></div>
       ${rec.type!=='location_moto' ? `<div class="r"><div class="k">N° Mobile</div><div class="v">${rec.mobile||''}</div></div>` : `<div class="r"><div class="k">RC N°</div><div class="v">${rec.rc||''}</div></div>`}
-      ${rec.type==='location_moto' ? `<div class="r"><div class="k">NIF N°</div><div class="v">${rec.nif||''}</div></div><div class="r"><div class="k">NIS N°</div><div class="v">${rec.nis||''}</div></div>` : `
+      ${rec.type==='location_moto' ? `<div class="r"><div class="k">NIF N°</div><div class="v">${rec.nif||''}</div></div><div class="r"><div class="k">NIS N°</div><div class="v">${rec.nis||''}</div></div><div class="r"><div class="k">AI N°</div><div class="v">${rec.ai||''}</div></div>` : `
       <div class="r"><div class="k">RC N°</div><div class="v">${rec.rc||''}</div></div>
       <div class="r"><div class="k">N° Fixe</div><div class="v">${rec.fixe||''}</div></div>
       <div class="r"><div class="k">NIF N°</div><div class="v">${rec.nif||''}</div></div>
@@ -2089,7 +2152,7 @@ function renderFactureSheet(rec){
   document.getElementById('factureSheet').innerHTML = factureSheetHTML(rec);
 }
 
-document.getElementById('backFromSheetBtn').onclick = ()=>switchView('facture');
+document.getElementById('backFromSheetBtn').onclick = ()=>switchView(sheetBackTarget || 'facture');
 document.getElementById('printBtn').onclick = ()=>window.print();
 
 // ---------------- historique / tableau de bord (pagination serveur) ----------------
@@ -2118,7 +2181,7 @@ async function renderStats(){
   let enRetard = 0;
   const todayMs = Date.now();
   all.forEach(e=>{
-    if(e.statut !== 'paye'){
+    if(e.statut !== 'paye' && !e.avoirNetZero){
       const d = new Date(e.date);
       if(!isNaN(d) && (todayMs - d.getTime()) > 15*24*3600*1000) enRetard++;
     }
@@ -2151,7 +2214,7 @@ async function searchFacturesGlobal(query){
   try{
     const { data, error } = await sb.rpc('search_factures', { p_query: query });
     if(error){ console.error(error); return []; }
-    return (data||[]).map(r=>({
+    const mapped = (data||[]).map(r=>({
       key:r.key, numero:r.numero, date:r.date, raison:r.raison, type:r.type||'classique',
       totals:r.totals||{}, payer:(r.totals&&r.totals.payer)||0,
       statut:r.statut||'non_paye', basePaiement:r.base_paiement||'', montantPartiel:r.montant_partiel||0,
@@ -2159,6 +2222,7 @@ async function searchFacturesGlobal(query){
       annulee:!!r.annulee, annuleeLe:r.annulee_le||'', annuleePar:r.annulee_par||'', motifAnnulation:r.motif_annulation||'',
       modifieeLe:r.modifiee_le||'', modifieePar:r.modifiee_par||'', motifModification:r.motif_modification||''
     }));
+    return await attachAvoirs(mapped);
   }catch(e){ console.error(e); return []; }
 }
 
@@ -2227,12 +2291,12 @@ function renderTable(index){
     const statutLabel = paye ? 'Payé' : (partiel ? 'Payé partiellement' : 'Impayé');
     const ann = !!e.annulee;
     const dObj = new Date(e.date);
-    const enRetard = !paye && !ann && !isNaN(dObj) && (Date.now() - dObj.getTime()) > 15*24*3600*1000;
+    const enRetard = !paye && !ann && !e.avoirNetZero && !isNaN(dObj) && (Date.now() - dObj.getTime()) > 15*24*3600*1000;
     const annTip = ann ? `Annulée le ${fmtDateDMY(String(e.annuleeLe).slice(0,10))}${e.annuleePar?' par '+e.annuleePar:''} — ${e.motifAnnulation||''}` : '';
     const modTip = e.modifieeLe ? `Corrigée le ${fmtDateDMY(String(e.modifieeLe).slice(0,10))}${e.modifieePar?' par '+e.modifieePar:''}${e.motifModification?' — '+e.motifModification:''}` : '';
     const escA = (t)=>String(t).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
     return `<tr${ann ? ' class="lv-cancelled"' : (enRetard ? ' class="row-late" style="background:#FFF4F4; border-left:3px solid var(--red);"' : '')}>
-      <td><span class="${ann?'lv-strike':''}">${e.numero}</span>${ann ? ` <span class="lv-badge red" title="${escA(annTip)}">ANNULÉE</span>` : ''}${(!ann && e.modifieeLe) ? ` <span class="lv-badge" title="${escA(modTip)}">corrigée</span>` : ''}${enRetard ? ' <span title="En retard (+15 jours)" style="color:var(--red); font-weight:700;">⚠</span>' : ''}</td>
+      <td><span class="${ann?'lv-strike':''}">${e.numero}</span>${ann ? ` <span class="lv-badge red" title="${escA(annTip)}">ANNULÉE</span>` : ''}${(!ann && e.modifieeLe) ? ` <span class="lv-badge" title="${escA(modTip)}">corrigée</span>` : ''}${(e.avoirs && e.avoirs.length) ? ` <span class="lv-badge red" title="${escA('Avoir(s) : ' + e.avoirs.map(a=>a.numero).join(', '))}">${e.avoirNetZero ? 'Avoir total' : 'Avoir partiel −' + fmtNum(e.avoirPayer)}</span>` : ''}${enRetard ? ' <span title="En retard (+15 jours)" style="color:var(--red); font-weight:700;">⚠</span>' : ''}</td>
       <td>${typeBadge(e.type)}</td>
       <td>${fmtDateDMY(e.date)}</td>
       <td><a href="#" onclick="openFicheClientFor('${e.raison.replace(/'/g,"\\'")}'); return false;" style="color:var(--ink); font-weight:600; text-decoration:none; border-bottom:1px dotted var(--slate);" title="Voir la fiche client">${e.raison}</a></td>
@@ -2331,6 +2395,7 @@ document.getElementById('exportExcelBtn').onclick = async ()=>{
       'Client': e.raison,
       'Montant Total H.T (DA)': e.annulee ? 0 : ht,
       'Montant à payer (DA)': e.annulee ? 0 : refAmount,
+      "Avoirs émis (DA)": (e.avoirs && e.avoirs.length) ? -e.avoirPayer : '',
       'Statut': e.annulee ? 'Annulée' : (e.statut === 'paye' ? 'Payé' : (e.statut === 'partiel' ? 'Payé partiellement' : 'Impayé')),
       'Payé sur la base de': (!e.annulee && (e.statut === 'paye' || e.statut === 'partiel')) ? (base==='ttc' ? 'Total TTC' : 'Total à payer') : '',
       'Montant payé partiellement (DA)': (!e.annulee && e.statut === 'partiel') ? e.montantPartiel : '',
@@ -2342,7 +2407,7 @@ document.getElementById('exportExcelBtn').onclick = async ()=>{
     };
   });
   const ws = XLSX.utils.json_to_sheet(data);
-  ws['!cols'] = [{wch:20},{wch:14},{wch:12},{wch:28},{wch:18},{wch:18},{wch:16},{wch:14},{wch:18},{wch:22},{wch:16},{wch:30},{wch:20},{wch:30}];
+  ws['!cols'] = [{wch:20},{wch:14},{wch:12},{wch:28},{wch:18},{wch:18},{wch:16},{wch:14},{wch:18},{wch:22},{wch:16},{wch:30},{wch:20},{wch:30},{wch:16}];
   const wb = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb, ws, 'Factures');
   const f = currentFilters();
@@ -2401,6 +2466,8 @@ async function reopenFacture(key){
   if(!rec){ toast('Introuvable.'); return; }
   currentFacture = rec;
   renderFactureSheet(rec);
+  sheetBackTarget = 'historique';
+  document.getElementById('refaireBtn').style.display = 'none';
   switchView('sheet');
 }
 
@@ -2443,8 +2510,17 @@ function openRowMenu(btn, items){
 function openFactureMenu(btn, key){
   const e = lastIndex.find(x=>x.key===key); if(!e) return;
   const items = [{ label:'✎ Modifier la date', fn:()=>onEditDate(key) }];
-  if(e.annulee) items.push({ label:'Rétablir la facture', fn:()=>restoreFacture(key) });
-  else items.push({ label:'Corriger', fn:()=>correctFacture(key) }, { label:'Annuler la facture', color:'var(--red)', fn:()=>cancelFacture(key) });
+  if(e.annulee){
+    items.push({ label:'Rétablir la facture', fn:()=>restoreFacture(key) });
+  } else {
+    // une facture payée ou ayant un avoir ne se corrige plus : on émet un avoir puis une nouvelle facture
+    const locked = e.statut === 'paye' || e.statut === 'partiel' || (e.avoirs && e.avoirs.length);
+    items.push(locked
+      ? { label:'Corriger (verrouillé)', color:'var(--slate)', fn:()=>toast('Facture payée ou avec avoir : émettez un avoir, puis créez la facture corrigée.') }
+      : { label:'Corriger', fn:()=>correctFacture(key) });
+    if(!e.avoirNetZero) items.push({ label:'Émettre un avoir', color:'var(--red)', fn:()=>openAvoirModal(key) });
+    if(e.avoirs && e.avoirs.length) items.push({ label:`Voir les avoirs (${e.avoirs.length})`, fn:()=>openAvoirsOfFacture(e) });
+  }
   openRowMenu(btn, items);
 }
 function openLivreurRowMenu(btn, key){
@@ -2468,6 +2544,7 @@ async function correctFacture(key){
   if(rec.annulee){ toast('Facture annulée : rétablissez-la avant de la corriger.'); return; }
   invoiceType = rec.type || 'classique';
   activeRows = (rec.rows || []).map(r=>({ ...r }));
+  activeRows.forEach(r=>{ if(r.assuranceAmount == null && r.assurance != null) r.assuranceAmount = r.assurance; });
   await openFactureEditor(rec);
 }
 async function saveFactureCorrection(){
@@ -2555,6 +2632,386 @@ async function restoreFacture(key){
   if(error){ console.error(error); toast('Erreur de mise à jour'); return; }
   toast('Facture rétablie.'); loadPage(); renderStats();
 }
+
+
+// ================= FACTURES D'AVOIR =================
+// Un avoir ne modifie jamais la facture d'origine : c'est un document à part (numéro AV/000001/2026) qui la réduit.
+const AV_MOTIFS = [
+  ['erreur', 'Erreur de facturation'],
+  ['non_livre', 'Colis non livré ou retourné'],
+  ['remise', 'Remise commerciale'],
+  ['doublon', 'Double facturation'],
+  ['autre', 'Autre (à préciser)']
+];
+const avEsc = (v)=>String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const avRound = (x)=>Math.round(((Number(x)||0) + Number.EPSILON) * 100) / 100;
+const avMotifLabel = (code)=>(AV_MOTIFS.find(m=>m[0]===code) || [code, code])[1];
+
+// Montant HT d'une ligne selon le type de facture (même règle que l'éditeur)
+function rowAmountFor(type, r){
+  if(type==='cls') return r.tarifVente || 0;
+  if(type==='location_moto') return r.total || 0;
+  if(type==='inter_compagnie') return r.montantHt || 0;
+  if(type==='ecommerce') return r.tarif || 0;
+  return (r.frais || 0) + (r.assuranceAmount != null ? r.assuranceAmount : (r.assurance || 0));
+}
+function avLineLabel(type, r, i){
+  const j = (a)=>a.filter(x=>x!=null && String(x).trim()!=='').join(' — ');
+  let t = '';
+  if(type==='classique') t = j([r.tracking, r.destinataire]) + (r.destination ? ` (${r.destination})` : '');
+  else if(type==='cls') t = j([r.tracking, [r.wilayaDepart, r.wilayaDestination].filter(Boolean).join(' → ')]);
+  else if(type==='ecommerce') t = j([r.date ? fmtDateDMY(r.date) : '', r.expediteur, r.designation]);
+  else if(type==='inter_compagnie') t = j([r.designation, r.service]) + ` (${Math.round(r.nombreEnvois||0)} envois)`;
+  else if(type==='location_moto') t = (r.description || '') + ` (${r.qtj||0} j × ${fmtNum(r.prixUnitaire||0)})`;
+  return t.trim() || `Ligne ${i+1}`;
+}
+
+// ---------- avoirs rattachés aux factures (montants nets) ----------
+async function fetchAvoirsSummary(keys){
+  const map = {};
+  for(let i=0; i<keys.length; i+=80){
+    const { data, error } = await sb.from('avoirs').select('facture_key, numero, date, mode, totals').in('facture_key', keys.slice(i, i+80));
+    if(error){ console.error(error); continue; }
+    (data||[]).forEach(a=>{ (map[a.facture_key] = map[a.facture_key] || []).push(a); });
+  }
+  return map;
+}
+// Les montants des factures deviennent « nets d'avoirs » : chiffre d'affaires, impayés, retards, Analyse et Fiche client en tiennent compte.
+async function attachAvoirs(entries){
+  if(!entries.length) return entries;
+  const map = await fetchAvoirsSummary(entries.map(e=>e.key));
+  entries.forEach(e=>{
+    const list = map[e.key] || [];
+    e.avoirs = list; e.avoirNetZero = false;
+    if(!list.length) return;
+    const sum = (k)=>list.reduce((s,a)=>s + ((a.totals && a.totals[k]) || 0), 0);
+    const t = e.totals || {};
+    e.grossTotals = { ...t }; e.grossPayer = e.payer;
+    const ttcGross = t.ttc != null ? t.ttc : ((t.ht||0) + (t.tva||0));
+    const net = { ht: avRound((t.ht||0) - sum('ht')), tva: avRound((t.tva||0) - sum('tva')), ttc: avRound(ttcGross - sum('ttc')), timbre: avRound((t.timbre||0) - sum('timbre')), payer: avRound((t.payer||0) - sum('payer')) };
+    e.avoirHt = avRound(sum('ht')); e.avoirPayer = avRound(sum('payer'));
+    e.avoirNetZero = net.ht <= 0.01;
+    if(e.avoirNetZero){ net.ht = 0; net.tva = 0; net.ttc = 0; net.timbre = 0; net.payer = 0; }
+    e.totals = net; e.payer = net.payer;
+  });
+  return entries;
+}
+
+// ---------- création d'un avoir ----------
+let avState = null;
+async function openAvoirModal(key){
+  const rec = await getFactureRecord(key);
+  if(!rec){ toast('Facture introuvable.'); return; }
+  if(rec.annulee){ toast('Facture annulée : aucun avoir possible.'); return; }
+  const { data: prev, error: perr } = await sb.from('avoirs').select('numero, mode, rows, totals').eq('facture_key', key);
+  if(perr){ console.error(perr); toast('Erreur de lecture des avoirs existants.'); return; }
+  const type = rec.type || 'classique';
+  const schema = TYPE_SCHEMAS[type];
+  const credited = {}; let prevHt = 0, prevTimbre = 0;
+  (prev||[]).forEach(a=>{
+    (a.rows||[]).forEach(r=>{ credited[r.idx] = (credited[r.idx]||0) + (r.montant||0); });
+    prevHt += (a.totals && a.totals.ht) || 0; prevTimbre += (a.totals && a.totals.timbre) || 0;
+  });
+  const lines = (rec.rows||[]).map((r,i)=>{
+    const amount = avRound(rowAmountFor(type, r)), done = avRound(credited[i]||0);
+    return { idx:i, label: avLineLabel(type, r, i), amount, done, remain: avRound(Math.max(amount - done, 0)) };
+  }).filter(l=>l.amount > 0);
+  const remainHt = avRound(lines.reduce((s,l)=>s+l.remain, 0));
+  if(remainHt <= 0.009){ toast('Cette facture est déjà entièrement créditée.'); return; }
+  const origHt = avRound((rec.totals && rec.totals.ht) || lines.reduce((s,l)=>s+l.amount,0));
+  avState = { rec, type, schema, lines, remainHt, origHt, prevHt: avRound(prevHt), prevTimbre: avRound(prevTimbre), origTimbre: (rec.totals && rec.totals.timbre) || 0, timbreManual:false, calc:null, created:null };
+
+  const inp = 'border:1px solid var(--line); border-radius:5px; padding:4px 6px; font:inherit;';
+  const body = `
+    <div style="font-size:13px; line-height:1.6; margin-bottom:12px;">
+      Facture <b>${avEsc(rec.numero)}</b> du ${fmtDateDMY(rec.date)} — <b>${avEsc(rec.raison)}</b><br>
+      <span style="color:var(--slate);">HT de la facture : ${fmtNum(origHt)} DA · déjà crédité : ${fmtNum(avState.prevHt)} DA · <b>solde créditable : ${fmtNum(remainHt)} DA</b></span>
+    </div>
+    <div class="grid" style="margin-bottom:10px;">
+      <div class="field"><label>Type d'avoir</label>
+        <select id="avMode" onchange="avModeChanged()">
+          <option value="total">Avoir total (tout le solde restant)</option>
+          <option value="partiel">Avoir partiel (choisir les lignes et montants)</option>
+        </select></div>
+      <div class="field"><label>Date de l'avoir</label><input type="date" id="avDate" min="${avEsc(rec.date)}"></div>
+      <div class="field"><label>Motif</label>
+        <select id="avMotif"><option value="">— Choisir —</option>${AV_MOTIFS.map(([c,l])=>`<option value="${c}">${l}</option>`).join('')}</select></div>
+      <div class="field"><label>Précision (obligatoire si « Autre »)</label><input type="text" id="avMotifTxt" placeholder="ex. colis refusé par le destinataire"></div>
+    </div>
+    <div style="border:1px solid var(--line); border-radius:8px; overflow:auto; max-height:260px;">
+      <table style="font-size:12.5px;">
+        <thead><tr><th style="width:34px;"></th><th>Ligne</th><th class="num">Restant HT</th><th class="num">À créditer HT</th></tr></thead>
+        <tbody>${lines.map((l,i)=>`
+          <tr>
+            <td><input type="checkbox" id="avCb-${i}" onchange="avRecalc()" ${l.remain<=0?'disabled':''}></td>
+            <td>${avEsc(l.label)}${l.done>0 ? `<div style="font-size:11px; color:var(--slate);">déjà crédité : ${fmtNum(l.done)}</div>` : ''}</td>
+            <td class="num">${fmtNum(l.remain)}</td>
+            <td class="num"><input type="number" min="0" step="0.01" id="avAmt-${i}" value="${l.remain}" oninput="avRecalc()" style="width:100px; text-align:right; ${inp}"></td>
+          </tr>`).join('')}</tbody>
+      </table>
+    </div>
+    ${schema.hasDroitTimbre ? `<div class="field" style="margin-top:10px;"><label>Droit de timbre crédité (DA)</label><input type="number" min="0" step="1" id="avTimbre" oninput="avState.timbreManual=true; avRecalc()"></div>` : ''}
+    <div style="margin-top:12px; font-size:13px; line-height:1.9; background:#F4F5F7; border-radius:8px; padding:10px 14px;">
+      <div style="display:flex; justify-content:space-between;"><span>Total HT crédité</span><b id="avHt">0,00</b></div>
+      <div style="display:flex; justify-content:space-between;"><span>TVA (19 %)</span><b id="avTva">0,00</b></div>
+      <div style="display:flex; justify-content:space-between;"><span>Total TTC</span><b id="avTtc">0,00</b></div>
+      ${schema.hasDroitTimbre ? `<div style="display:flex; justify-content:space-between;"><span>Droit de timbre</span><b id="avTimbreShow">0,00</b></div>` : ''}
+      <div style="display:flex; justify-content:space-between; border-top:1px solid var(--line); margin-top:4px; padding-top:4px; font-size:14px;"><span>Total de l'avoir</span><b id="avPayer" style="color:var(--red);">0,00</b></div>
+    </div>`;
+  const done = await lvModal({
+    title:"Émettre un avoir", body, maxWidth:'700px', okLabel:"Émettre l'avoir",
+    onOpen: ()=>{
+      document.getElementById('avDate').value = (todayISO() < rec.date) ? rec.date : todayISO();
+      avModeChanged();
+    },
+    onOk: avSubmit
+  });
+  if(done && avState && avState.created){
+    toast('Avoir ' + avState.created.numero + ' émis.');
+    showAvoirSheet(avState.created, { refaire: avState.created.mode === 'total' && true });
+    if(typeof loadPage === 'function') loadPage();
+    renderStats();
+  }
+}
+function avModeChanged(){
+  avState.timbreManual = false;
+  // en mode partiel on part d'une sélection vide : on choisit soi-même les lignes à créditer
+  if(document.getElementById('avMode').value === 'partiel') avState.lines.forEach((l,i)=>{ document.getElementById('avCb-'+i).checked = false; });
+  avRecalc();
+}
+function avRecalc(){
+  const st = avState; if(!st) return;
+  const total = document.getElementById('avMode').value === 'total';
+  let ht = 0;
+  st.lines.forEach((l,i)=>{
+    const cb = document.getElementById('avCb-'+i), inp = document.getElementById('avAmt-'+i);
+    if(total){ cb.checked = l.remain > 0; cb.disabled = true; inp.value = l.remain; inp.disabled = true; }
+    else { cb.disabled = l.remain <= 0; inp.disabled = !cb.checked; }
+    const v = cb.checked ? Math.min(Math.max(parseFloat(inp.value) || 0, 0), l.remain) : 0;
+    ht += v;
+  });
+  ht = avRound(ht);
+  const tva = avRound(ht * 0.19), ttc = avRound(ht + tva);
+  let timbre = 0;
+  if(st.schema.hasDroitTimbre){
+    const tEl = document.getElementById('avTimbre');
+    const full = Math.abs(st.prevHt + ht - st.origHt) <= 0.011;   // dernier avoir : on crédite aussi le reste du timbre
+    const auto = ht <= 0 ? 0 : (full ? avRound(Math.max(st.origTimbre - st.prevTimbre, 0)) : Math.round(calcDroitTimbre(ttc)));
+    if(!st.timbreManual) tEl.value = auto;
+    timbre = parseFloat(tEl.value) || 0;
+    document.getElementById('avTimbreShow').textContent = fmtNum(timbre);
+  }
+  const payer = avRound(ttc + timbre);
+  st.calc = { ht, tva, ttc, timbre, payer };
+  document.getElementById('avHt').textContent = fmtNum(ht);
+  document.getElementById('avTva').textContent = fmtNum(tva);
+  document.getElementById('avTtc').textContent = fmtNum(ttc);
+  document.getElementById('avPayer').textContent = fmtNum(payer);
+}
+async function avSubmit(){
+  const st = avState; avRecalc();
+  const rec = st.rec, c = st.calc;
+  const rows = [];
+  st.lines.forEach((l,i)=>{
+    if(!document.getElementById('avCb-'+i).checked) return;
+    const m = avRound(Math.min(Math.max(parseFloat(document.getElementById('avAmt-'+i).value) || 0, 0), l.remain));
+    if(m > 0) rows.push({ idx:l.idx, description:l.label, montant:m });
+  });
+  if(!rows.length || c.ht <= 0) return { error:'Sélectionnez au moins une ligne à créditer.' };
+  if(c.ht > st.remainHt + 0.011) return { error:'Le montant dépasse le solde créditable de la facture.' };
+  const dateVal = document.getElementById('avDate').value;
+  if(!dateVal) return { error:"La date de l'avoir est requise." };
+  if(dateVal < rec.date) return { error:"La date de l'avoir ne peut pas être antérieure à celle de la facture." };
+  const motifCode = document.getElementById('avMotif').value;
+  const motifTxt = document.getElementById('avMotifTxt').value.trim();
+  if(!motifCode) return { error:'Choisissez le motif de l\'avoir.' };
+  if(motifCode === 'autre' && !motifTxt) return { error:'Précisez le motif (champ « Autre »).' };
+  const year = parseInt(dateVal.slice(0,4), 10);
+  const { data: n, error: nerr } = await sb.rpc('next_avoir_number', { p_annee: year });
+  if(nerr || n == null){ console.error(nerr); return { error:"Impossible de réserver le numéro d'avoir." }; }
+  const pad = String(n).padStart(6, '0');
+  const av = {
+    key: `AV_${year}_${pad}`, numero: `AV/${pad}/${year}`, date: dateVal,
+    facture_key: rec.key, facture_numero: rec.numero, facture_date: rec.date, facture_type: st.type,
+    raison: rec.raison, adresse: rec.adresse||'', rc: rec.rc||'', nif: rec.nif||'', nis: rec.nis||'', ai: rec.ai||'', fixe: rec.fixe||'', mobile: rec.mobile||'', bc: rec.bc||'',
+    periode_du: rec.periodeDu || rec.periode_du || null, periode_au: rec.periodeAu || rec.periode_au || null,
+    mode: document.getElementById('avMode').value, rows, totals: c,
+    motif_code: motifCode, motif: motifTxt ? `${avMotifLabel(motifCode)} — ${motifTxt}` : avMotifLabel(motifCode),
+    created_by_name: currentDisplayName || null
+  };
+  const { error } = await sb.from('avoirs').insert(av);
+  if(error){ console.error(error); return { error: (error.message || "Erreur d'enregistrement de l'avoir.") }; }
+  st.created = av;
+  return { value:true };
+}
+
+// ---------- impression de l'avoir ----------
+function avoirSheetHTML(av){
+  const schema = TYPE_SCHEMAS[av.facture_type] || TYPE_SCHEMAS.classique;
+  const t = av.totals || {};
+  const neg = (x)=>fmtNum(-(Number(x)||0));
+  const rows = av.rows || [];
+  const PER_PAGE = 24;
+  const pages = []; for(let i=0; i<Math.max(rows.length,1); i+=PER_PAGE) pages.push(rows.slice(i, i+PER_PAGE));
+  const head = (pIdx, pCount)=>`
+    <div class="fs-head">
+      <div><div class="fs-logo"><img src="${GUEPEX_LOGO}" alt="GuepEX"></div></div>
+      <div class="fs-co">
+        GUEPEX Spa<br>Zone d'activité Dar El Beida,<br>Lot N° 147, 148, 149 Dar El Beida<br>
+        N°RC : 19B0243810-16/00 &nbsp; N°NIF : 001907024381063<br>
+        N°NIS : 001907010000766 &nbsp; N°AI : 16200503198<br>www.guepex.dz
+      </div>
+    </div>
+    <div class="fs-title">Facture d'avoir <span class="fs-pagenum">Page ${pIdx}/${pCount}</span></div>
+    <div class="fs-meta">
+      <div class="r"><div class="k">Avoir N°</div><div class="v">${avEsc(av.numero)}</div></div>
+      <div class="r"><div class="k">Date</div><div class="v">${fmtDateDMY(av.date)}</div></div>
+      <div class="r"><div class="k">Raison sociale</div><div class="v">${avEsc(av.raison)}</div></div>
+      <div class="r"><div class="k">Se rapporte à la facture</div><div class="v">${avEsc(av.facture_numero)} du ${fmtDateDMY(av.facture_date)}</div></div>
+      <div class="r"><div class="k">Adresse</div><div class="v">${avEsc(av.adresse)}</div></div>
+      <div class="r"><div class="k">N° Mobile</div><div class="v">${avEsc(av.mobile)}</div></div>
+      <div class="r"><div class="k">RC N°</div><div class="v">${avEsc(av.rc)}</div></div>
+      <div class="r"><div class="k">N° Fixe</div><div class="v">${avEsc(av.fixe)}</div></div>
+      <div class="r"><div class="k">NIF N°</div><div class="v">${avEsc(av.nif)}</div></div>
+      <div class="r"><div class="k">BC N°</div><div class="v">${avEsc(av.bc)}</div></div>
+      <div class="r"><div class="k">NIS N°</div><div class="v">${avEsc(av.nis)}</div></div>
+      <div class="r"><div class="k">AI N°</div><div class="v">${avEsc(av.ai)}</div></div>
+    </div>`;
+  const foot = `
+    <div class="fs-foot">
+      Pour toute communication avec le service facturation — facturation@guepex.dz — 0560 30 68 31<br>
+      GUEPEX S.P.A — BNP PARIBAS : 027 00707 0000665001 51
+    </div>`;
+  const totals = `
+    <div class="fs-totals${schema.hasDroitTimbre ? ' fs-totals-wide' : ''}">
+      <div class="r"><span>Total H.T crédité</span><span>${neg(t.ht)}</span></div>
+      <div class="r"><span>TVA (19%)</span><span>${neg(t.tva)}</span></div>
+      <div class="r"><span>Total TTC</span><span>${neg(t.ttc)}</span></div>
+      ${schema.hasDroitTimbre ? `<div class="r"><span>Droit de timbre</span><span>${neg(t.timbre)}</span></div>` : ''}
+      <div class="r final"><span>Total de l'avoir</span><span>${neg(t.payer)}</span></div>
+    </div>
+    <div class="fs-letters"><b>Arrêter le présent avoir à la somme de :</b> ${avEsc(numberToFrenchWords(t.payer || 0))}</div>
+    <div class="fs-pay">Motif de l'avoir : ${avEsc(av.motif)}</div>
+    <div class="fs-sign"><div class="fs-signbox">Cachet et signature</div></div>`;
+  return pages.map((pr, p)=>{
+    const last = p === pages.length - 1;
+    return `<div class="fs-page">
+      ${head(p+1, pages.length)}
+      <table class="fs-table">
+        <thead><tr><th style="width:42px;">N°</th><th>Désignation</th><th class="num">Montant HT crédité</th></tr></thead>
+        <tbody>${pr.map((r,i)=>`<tr><td>${p*PER_PAGE + i + 1}</td><td>${avEsc(r.description)}</td><td class="num">${neg(r.montant)}</td></tr>`).join('')}</tbody>
+      </table>
+      ${last ? totals : ''}
+      ${foot}
+    </div>`;
+  }).join('');
+}
+let sheetBackTarget = 'facture', currentAvoirSheet = null;
+function showAvoirSheet(av, opts){
+  currentAvoirSheet = av;
+  document.getElementById('factureSheet').innerHTML = avoirSheetHTML(av);
+  sheetBackTarget = (opts && opts.back) || 'historique';
+  document.getElementById('refaireBtn').style.display = (opts && opts.refaire && av.mode === 'total') ? '' : 'none';
+  switchView('sheet');
+}
+document.getElementById('refaireBtn').onclick = async ()=>{
+  const av = currentAvoirSheet; if(!av) return;
+  const rec = await getFactureRecord(av.facture_key);
+  if(!rec){ toast('Facture d\'origine introuvable.'); return; }
+  invoiceType = rec.type || 'classique';
+  activeRows = (rec.rows || []).map(r=>({ ...r }));
+  activeRows.forEach(r=>{ if(r.assuranceAmount == null && r.assurance != null) r.assuranceAmount = r.assurance; });
+  window._pendingClientName = rec.raison;
+  document.getElementById('refaireBtn').style.display = 'none';
+  await openFactureEditor();
+  toast('Facture prête à être corrigée : modifiez les lignes puis enregistrez.');
+};
+
+// ---------- onglet Avoirs ----------
+let avAll = [], avFiltered = [], avPage = 0;
+const AV_PAGE_SIZE = 50;
+async function renderAvoirsTab(){
+  const { data, error } = await sb.from('avoirs').select('*').order('date', { ascending:false }).order('created_at', { ascending:false });
+  if(error){ console.error(error); toast('Erreur de chargement des avoirs.'); }
+  avAll = data || [];
+  const mSel = document.getElementById('avMonthFilter'), cur = mSel.value;
+  const months = [...new Set(avAll.map(a=>(a.date||'').slice(0,7)).filter(Boolean))].sort().reverse();
+  mSel.innerHTML = '<option value="">Tous les mois</option>' + months.map(m=>{ const [y,mo] = m.split('-'); return `<option value="${m}">${MONTH_LABELS[mo]||mo} ${y}</option>`; }).join('');
+  if(months.includes(cur)) mSel.value = cur;
+  avPage = 0; avApplyFilters();
+}
+function avApplyFilters(){
+  const q = norm(document.getElementById('avSearch').value), m = document.getElementById('avMonthFilter').value;
+  avFiltered = avAll.filter(a=>{
+    if(m && (a.date||'').slice(0,7) !== m) return false;
+    if(q && !(norm(a.numero).includes(q) || norm(a.facture_numero).includes(q) || norm(a.raison).includes(q))) return false;
+    return true;
+  });
+  avRenderTable();
+}
+function avRenderTable(){
+  const body = document.getElementById('avBody'), table = document.getElementById('avTable'), empty = document.getElementById('avEmpty'), pager = document.getElementById('avPager');
+  const total = avFiltered.reduce((s,a)=>s + ((a.totals && a.totals.payer) || 0), 0);
+  document.getElementById('avSummary').innerHTML =
+    `<div><span style="color:var(--slate); font-weight:600;">Avoirs</span> <b>${avFiltered.length}</b></div><div><span style="color:var(--slate); font-weight:600;">Total crédité</span> <b style="color:var(--red);">−${fmtNum(total)} DA</b></div>`;
+  if(!avFiltered.length){ body.innerHTML = ''; table.style.display = 'none'; empty.style.display = ''; pager.style.display = 'none'; return; }
+  empty.style.display = 'none'; table.style.display = '';
+  const totalPages = Math.max(1, Math.ceil(avFiltered.length / AV_PAGE_SIZE));
+  if(avPage > totalPages-1) avPage = totalPages-1;
+  body.innerHTML = avFiltered.slice(avPage*AV_PAGE_SIZE, (avPage+1)*AV_PAGE_SIZE).map(a=>`<tr>
+      <td style="font-weight:600;">${avEsc(a.numero)}</td>
+      <td>${fmtDateDMY(a.date)}</td>
+      <td>${avEsc(a.facture_numero)}</td>
+      <td>${typeBadge(a.facture_type)}</td>
+      <td style="font-weight:600;">${avEsc(a.raison)}</td>
+      <td><span class="lv-badge ${a.mode==='total'?'red':''}">${a.mode==='total'?'Total':'Partiel'}</span></td>
+      <td class="num" style="color:var(--red); font-weight:600;">−${fmtNum((a.totals&&a.totals.payer)||0)} DA</td>
+      <td style="max-width:240px; white-space:normal;">${avEsc(a.motif)}</td>
+      <td>${avEsc(a.created_by_name)||'—'}</td>
+      <td><div style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="avReopen('${avEsc(a.key)}')">Revoir / Imprimer</button></div></td>
+    </tr>`).join('');
+  pager.style.display = 'flex';
+  const from = avPage*AV_PAGE_SIZE+1, to = Math.min((avPage+1)*AV_PAGE_SIZE, avFiltered.length);
+  document.getElementById('avPagerInfo').textContent = `Page ${avPage+1} sur ${totalPages} — avoirs ${from} à ${to} sur ${avFiltered.length} (${AV_PAGE_SIZE} par page)`;
+  document.getElementById('avPagerPrev').disabled = avPage === 0;
+  document.getElementById('avPagerNext').disabled = (avPage+1) >= totalPages;
+}
+function avReopen(key){
+  const a = avAll.find(x=>x.key===key); if(!a) return;
+  showAvoirSheet(a, { back:'avoirs' });
+}
+function openAvoirsOfFacture(e){
+  const list = e.avoirs || [];
+  if(list.length === 1){
+    sb.from('avoirs').select('*').eq('key', 'AV_' + list[0].numero.split('/')[2] + '_' + list[0].numero.split('/')[1]).maybeSingle()
+      .then(({ data })=>{ if(data) showAvoirSheet(data, { back:'historique' }); else { document.getElementById('avSearch').value = e.numero; switchView('avoirs'); } });
+    return;
+  }
+  document.getElementById('avSearch').value = e.numero;
+  switchView('avoirs');
+}
+document.getElementById('avSearch').addEventListener('input', ()=>{ clearTimeout(window._avDeb); window._avDeb = setTimeout(()=>{ avPage = 0; avApplyFilters(); }, 250); });
+document.getElementById('avMonthFilter').onchange = ()=>{ avPage = 0; avApplyFilters(); };
+document.getElementById('avPagerPrev').onclick = ()=>{ if(avPage>0){ avPage--; avRenderTable(); window.scrollTo({ top:0, behavior:'smooth' }); } };
+document.getElementById('avPagerNext').onclick = ()=>{ if((avPage+1)*AV_PAGE_SIZE < avFiltered.length){ avPage++; avRenderTable(); window.scrollTo({ top:0, behavior:'smooth' }); } };
+document.getElementById('avExportBtn').onclick = ()=>{
+  if(!avFiltered.length){ toast('Aucun avoir à exporter.'); return; }
+  const data = avFiltered.map(a=>{
+    const t = a.totals || {};
+    return {
+      'Avoir N°': a.numero, 'Date': fmtDateDMY(a.date), 'Facture d\'origine': a.facture_numero, 'Date facture': fmtDateDMY(a.facture_date),
+      'Type': TYPE_LABELS[a.facture_type] || a.facture_type, 'Client': a.raison, 'Nature': a.mode === 'total' ? 'Total' : 'Partiel',
+      'Total HT (DA)': -(t.ht||0), 'TVA (DA)': -(t.tva||0), 'TTC (DA)': -(t.ttc||0), 'Droit de timbre (DA)': -(t.timbre||0), 'Total de l\'avoir (DA)': -(t.payer||0),
+      'Motif': a.motif, 'Créé par': a.created_by_name || ''
+    };
+  });
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:18},{wch:12},{wch:22},{wch:12},{wch:16},{wch:28},{wch:10},{wch:14},{wch:12},{wch:14},{wch:14},{wch:18},{wch:36},{wch:20}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Avoirs');
+  const mth = document.getElementById('avMonthFilter').value;
+  XLSX.writeFile(wb, 'avoirs' + (mth ? '-' + mth : '') + '.xlsx');
+};
 
 
 // ================= FACTURE LIVREUR (section indépendante) =================
@@ -3562,7 +4019,7 @@ function mLabelTable(t){
     [...tr.children].forEach((td,i)=>{ td.setAttribute('data-label', heads[i] || ''); });
   });
 }
-['histTable','lvHistTable','ldTable','ficheClientTable'].forEach(id=>{
+['histTable','lvHistTable','ldTable','ficheClientTable','avTable'].forEach(id=>{
   const t = document.getElementById(id); if(!t) return;
   t.classList.add('m-cards');
   const tb = t.querySelector('tbody'); if(!tb) return;
@@ -3575,15 +4032,16 @@ function switchView(name){
   document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
   document.getElementById('view-'+name).classList.add('active');
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique', client:'client', analyse:'analyse', livreur:'livreur', livreurForm:'livreur', livreurGroup:'livreur', livreurDir:'livreur', livreurSheet:'livreur'};
+  const map = {import:'import', facture:'facture', sheet:'facture', historique:'historique', client:'client', analyse:'analyse', avoirs:'avoirs', livreur:'livreur', livreurForm:'livreur', livreurGroup:'livreur', livreurDir:'livreur', livreurSheet:'livreur'};
   const btn = document.querySelector(`.tab-btn[data-view="${map[name]}"]`);
   if(btn) btn.classList.add('active');
-  document.querySelector('main').classList.toggle('wide', name==='historique' || name==='client' || name==='analyse' || name==='livreur' || name==='livreurDir');
+  document.querySelector('main').classList.toggle('wide', name==='historique' || name==='client' || name==='analyse' || name==='livreur' || name==='livreurDir' || name==='avoirs');
   if(name==='historique') renderHistorique();
   if(name==='client') renderFicheClientTab();
   if(name==='analyse') renderAnalyse();
   if(name==='livreur') renderLivreurTab();
   if(name==='livreurDir') renderLivreurDir();
+  if(name==='avoirs') renderAvoirsTab();
 }
 document.querySelectorAll('.tab-btn').forEach(b=>{
   b.addEventListener('click', ()=>switchView(b.dataset.view));
@@ -3846,7 +4304,7 @@ async function renderAnalyse(){
   const todayMs = Date.now();
   const riskStats = {};
   all.forEach(e=>{
-    if(e.statut === 'paye' || !e.raison) return;
+    if(e.statut === 'paye' || e.avoirNetZero || !e.raison) return;
     const d = new Date(e.date);
     if(isNaN(d)) return;
     const joursRetard = Math.floor((todayMs - d.getTime())/(24*3600*1000));
