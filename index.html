@@ -2635,7 +2635,7 @@ async function restoreFacture(key){
 
 
 // ================= FACTURES D'AVOIR =================
-// Un avoir ne modifie jamais la facture d'origine : c'est un document à part (numéro AV/000001/2026) qui la réduit.
+// Un avoir ne modifie jamais la facture d'origine : c'est un document à part (numéro AV/0001/2026) qui la réduit.
 const AV_MOTIFS = [
   ['erreur', 'Erreur de facturation'],
   ['non_livre', 'Colis non livré ou retourné'],
@@ -2829,7 +2829,7 @@ async function avSubmit(){
   const year = parseInt(dateVal.slice(0,4), 10);
   const { data: n, error: nerr } = await sb.rpc('next_avoir_number', { p_annee: year });
   if(nerr || n == null){ console.error(nerr); return { error:"Impossible de réserver le numéro d'avoir." }; }
-  const pad = String(n).padStart(6, '0');
+  const pad = String(n).padStart(4, '0');   // AV/0001/2026
   const av = {
     key: `AV_${year}_${pad}`, numero: `AV/${pad}/${year}`, date: dateVal,
     facture_key: rec.key, facture_numero: rec.numero, facture_date: rec.date, facture_type: st.type,
