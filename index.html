@@ -2849,7 +2849,7 @@ async function avSubmit(){
 function avoirSheetHTML(av){
   const schema = TYPE_SCHEMAS[av.facture_type] || TYPE_SCHEMAS.classique;
   const t = av.totals || {};
-  const neg = (x)=>fmtNum(-(Number(x)||0));
+  const neg = (x)=>fmtNum(Math.abs(Number(x)||0));   // montants affichés sans le signe moins (demande du comptable)
   const rows = av.rows || [];
   const PER_PAGE = 24;
   const pages = []; for(let i=0; i<Math.max(rows.length,1); i+=PER_PAGE) pages.push(rows.slice(i, i+PER_PAGE));
@@ -2953,7 +2953,7 @@ function avRenderTable(){
   const body = document.getElementById('avBody'), table = document.getElementById('avTable'), empty = document.getElementById('avEmpty'), pager = document.getElementById('avPager');
   const total = avFiltered.reduce((s,a)=>s + ((a.totals && a.totals.payer) || 0), 0);
   document.getElementById('avSummary').innerHTML =
-    `<div><span style="color:var(--slate); font-weight:600;">Avoirs</span> <b>${avFiltered.length}</b></div><div><span style="color:var(--slate); font-weight:600;">Total crédité</span> <b style="color:var(--red);">−${fmtNum(total)} DA</b></div>`;
+    `<div><span style="color:var(--slate); font-weight:600;">Avoirs</span> <b>${avFiltered.length}</b></div><div><span style="color:var(--slate); font-weight:600;">Total crédité</span> <b style="color:var(--red);">${fmtNum(total)} DA</b></div>`;
   if(!avFiltered.length){ body.innerHTML = ''; table.style.display = 'none'; empty.style.display = ''; pager.style.display = 'none'; return; }
   empty.style.display = 'none'; table.style.display = '';
   const totalPages = Math.max(1, Math.ceil(avFiltered.length / AV_PAGE_SIZE));
@@ -2965,7 +2965,7 @@ function avRenderTable(){
       <td>${typeBadge(a.facture_type)}</td>
       <td style="font-weight:600;">${avEsc(a.raison)}</td>
       <td><span class="lv-badge ${a.mode==='total'?'red':''}">${a.mode==='total'?'Total':'Partiel'}</span></td>
-      <td class="num" style="color:var(--red); font-weight:600;">−${fmtNum((a.totals&&a.totals.payer)||0)} DA</td>
+      <td class="num" style="color:var(--red); font-weight:600;">${fmtNum((a.totals&&a.totals.payer)||0)} DA</td>
       <td style="max-width:240px; white-space:normal;">${avEsc(a.motif)}</td>
       <td>${avEsc(a.created_by_name)||'—'}</td>
       <td><div style="white-space:nowrap;"><button class="btn btn-ghost btn-sm" onclick="avReopen('${avEsc(a.key)}')">Revoir / Imprimer</button></div></td>
@@ -3001,7 +3001,7 @@ document.getElementById('avExportBtn').onclick = ()=>{
     return {
       'Avoir N°': a.numero, 'Date': fmtDateDMY(a.date), 'Facture d\'origine': a.facture_numero, 'Date facture': fmtDateDMY(a.facture_date),
       'Type': TYPE_LABELS[a.facture_type] || a.facture_type, 'Client': a.raison, 'Nature': a.mode === 'total' ? 'Total' : 'Partiel',
-      'Total HT (DA)': -(t.ht||0), 'TVA (DA)': -(t.tva||0), 'TTC (DA)': -(t.ttc||0), 'Droit de timbre (DA)': -(t.timbre||0), 'Total de l\'avoir (DA)': -(t.payer||0),
+      'Total HT (DA)': (t.ht||0), 'TVA (DA)': (t.tva||0), 'TTC (DA)': (t.ttc||0), 'Droit de timbre (DA)': (t.timbre||0), 'Total de l\'avoir (DA)': (t.payer||0),
       'Motif': a.motif, 'Créé par': a.created_by_name || ''
     };
   });
